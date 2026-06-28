@@ -55,3 +55,7 @@ coverage/
 __pycache__/
 *.pyc
 *.pyo
+
+# One-time local deploy helpers (may read local secrets)
+scripts/deploy_server.py
+scripts/update_nginx.py
