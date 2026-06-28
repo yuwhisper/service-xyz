@@ -5,9 +5,9 @@ export default {
   <div class="main-content">
     <div class="page-header"><h1>调度任务</h1><p>按需调用 API，查看历史执行日志</p></div>
     <div class="toolbar">
-      <input class="search-input" v-model="keyword" placeholder="搜索接口..." @keyup.enter="fetch" />
+      <input class="search-input" v-model="keyword" placeholder="搜索接口..." @keyup.enter="loadData" />
       <select class="form-select" v-model="methodFilter" style="width:110px"><option value="">全部方法</option><option v-for="m in methods" :value="m">{{m}}</option></select>
-      <button class="btn btn-primary btn-sm" @click="fetch">搜索</button>
+      <button class="btn btn-primary btn-sm" @click="loadData">搜索</button>
     </div>
     <div class="card">
       <div v-if="loading" class="empty-state"><p>加载中...</p></div>
@@ -77,11 +77,11 @@ export default {
     const logApi = ref(null); const logs = ref([]);
     const detailLog = ref(null);
 
-    async function fetch() {
+    async function loadData() {
       loading.value = true;
-      try { const r = await http.get(`/service/zyx/apis?project_id=1&keyword=${encodeURIComponent(keyword.value)}&method=${methodFilter.value}`); apis.value = r.data.data; } catch(e){} finally { loading.value = false; }
+      try { const r = await http.get(`/service/zyx/apis?project_id=1&keyword=${encodeURIComponent(keyword.value)}&method=${methodFilter.value}`); apis.value = r.data.data || []; } catch(e){ apis.value = []; } finally { loading.value = false; }
     }
-    onMounted(fetch);
+    onMounted(loadData);
 
     function openExec(a) { execApi.value = a; execParams.value = '{}'; execHeaders.value = '{}'; }
     async function doExec() {
@@ -101,6 +101,6 @@ export default {
     }
 
     function fmt(d) { if(!d) return '-'; return new Date(d).toLocaleString(); }
-    return { apis, loading, keyword, methodFilter, methods, fetch, execApi, execParams, execHeaders, executing, openExec, doExec, logApi, logs, openLogs, detailLog, fmt };
+    return { apis, loading, keyword, methodFilter, methods, loadData, execApi, execParams, execHeaders, executing, openExec, doExec, logApi, logs, openLogs, detailLog, fmt };
   }
 };

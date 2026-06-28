@@ -55,14 +55,14 @@ export default {
     const showForm = ref(false); const editingId = ref(null);
     const form = reactive({ api_id:'', name:'', cron_expression:'0 0 * * *', params:'{}' });
 
-    async function fetch() {
+    async function loadData() {
       loading.value = true;
       try {
         const [sr, ar] = await Promise.all([http.get('/service/zyx/schedules'), http.get('/service/zyx/apis?project_id=1')]);
-        schedules.value = sr.data.data; apis.value = ar.data.data;
-      } catch(e){} finally { loading.value = false; }
+        schedules.value = sr.data.data || []; apis.value = ar.data.data || [];
+      } catch(e){ schedules.value = []; apis.value = []; } finally { loading.value = false; }
     }
-    onMounted(fetch);
+    onMounted(loadData);
 
     function openCreate() { Object.assign(form, { api_id:'', name:'', cron_expression:'0 0 * * *', params:'{}' }); editingId.value = null; showForm.value = true; }
     function openEdit(s) { Object.assign(form, { api_id:s.api_id, name:s.name, cron_expression:s.cron_expression, params:s.params }); editingId.value = s.id; showForm.value = true; }
@@ -71,14 +71,14 @@ export default {
       try {
         if (editingId.value) await http.put(`/service/zyx/schedules/${editingId.value}`, body);
         else await http.post('/service/zyx/schedules', body);
-        showForm.value = false; fetch(); show('保存成功');
+        showForm.value = false; loadData(); show('保存成功');
       } catch(e) { show('保存失败: '+(e.response?.data?.detail||e.message),'error'); }
     }
-    async function remove(id) { if(!confirm('确认删除？')) return; try { await http.delete(`/service/zyx/schedules/${id}`); fetch(); show('已删除'); } catch(e){ show('删除失败','error'); } }
+    async function remove(id) { if(!confirm('确认删除？')) return; try { await http.delete(`/service/zyx/schedules/${id}`); loadData(); show('已删除'); } catch(e){ show('删除失败','error'); } }
     async function toggle(s) {
       try {
         await http.put(`/service/zyx/schedules/${s.id}`, { api_id:s.api_id, name:s.name, cron_expression:s.cron_expression, params:s.params, enabled:s.enabled?0:1 });
-        fetch();
+        loadData();
       } catch(e){ show('操作失败','error'); }
     }
     function getApiName(id) { const a = apis.value.find(x=>x.id===id); return a?`${a.method} ${a.path}`:`#${id}`; }
