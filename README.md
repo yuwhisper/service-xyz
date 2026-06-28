@@ -30,8 +30,8 @@ GitHub Actions auto-deploy (optional): add repository secrets `SSH_HOST`, `SSH_U
 
 | Entry | Purpose |
 |-------|---------|
-| `https://121.43.75.44:8443/` | Admin UI (SPA) |
-| `https://www.ywzhaoran.xyz/service/zyx/*` | API |
+| `https://www.ywzhaoran.xyz/service/zyx/` | Admin UI (SPA) + API |
+| `https://121.43.75.44:8443/` | Admin UI (legacy IP entry) |
 
 ## API prefix
 

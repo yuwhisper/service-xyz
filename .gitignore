@@ -59,3 +59,6 @@ __pycache__/
 # One-time local deploy helpers (may read local secrets)
 scripts/deploy_server.py
 scripts/update_nginx.py
+scripts/sync_server.py
+scripts/patch_domain_nginx.py
+scripts/inspect_nginx.py
