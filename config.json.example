@@ -1,0 +1,16 @@
+{
+  "port": 3000,
+  "adminAccount": "admin@service-xyz.com",
+  "db": {
+    "host": "127.0.0.1",
+    "DATABASE": "zyx",
+    "port": 3306,
+    "user": "your_db_user",
+    "pass": "your_db_password"
+  },
+  "jwt": {
+    "secret": "change-me-to-a-random-string",
+    "expiresIn": "7d"
+  },
+  "closeRegister": false
+}

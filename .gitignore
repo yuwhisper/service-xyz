@@ -1,0 +1,57 @@
+# Dependencies
+node_modules/
+package-lock.json
+client/node_modules/
+client/package-lock.json
+pnpm-lock.yaml
+
+# Build output
+client/dist/
+
+# Environment
+.env
+.env.local
+.env.*.local
+config.json
+
+# Runtime
+log/
+*.log
+init.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# AI 工具本地配置
+.claude/settings.local.json
+.cursor/
+.aider*
+.continue/
+.cody/
+
+# 密钥和凭证
+*.pem
+*.key
+credentials.json
+.npmrc
+.aws/
+.ssh/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database
+*.db
+*.sqlite
+
+# Misc
+coverage/
+.nyc_output/
+__pycache__/
+*.pyc
+*.pyo

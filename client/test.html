@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"/><title>Diagnostic</title>
+<style>body{font-family:monospace;padding:20px;background:#1a1d24;color:#c9d1d9}.pass{color:#57ab5a}.fail{color:#f85149}.info{color:#58a6ff}#log{line-height:1.8}</style></head><body>
+<h2>Diagnostic Tests</h2><pre id="log"></pre>
+<script type="importmap">
+{
+  "imports": {
+    "vue": "https://esm.sh/vue@3.4.21/dist/vue.esm-browser.js",
+    "axios": "https://esm.sh/axios@1.7.2"
+  }
+}
+</script>
+<script type="module">
+const log = document.getElementById('log');
+function pass(msg) { log.innerHTML += `<span class="pass">✅ ${msg}</span>\n`; }
+function fail(msg) { log.innerHTML += `<span class="fail">❌ ${msg}</span>\n`; }
+function info(msg) { log.innerHTML += `<span class="info">📌 ${msg}</span>\n`; }
+
+// Test 1: Vue import
+try {
+  const vue = await import('vue');
+  if (vue.createApp && vue.ref && vue.reactive) {
+    pass('Vue CDN: createApp, ref, reactive all available');
+    info(`  Vue keys: ${Object.keys(vue).slice(0,8).join(', ')}...`);
+  } else {
+    fail('Vue CDN: missing expected exports');
+    info(`  Got: ${Object.keys(vue).join(', ')}`);
+  }
+} catch(e) {
+  fail(`Vue CDN import failed: ${e.message}`);
+}
+
+// Test 2: Actually create a Vue app
+try {
+  const { createApp, ref } = await import('vue');
+  const testRoot = document.createElement('div');
+  document.body.appendChild(testRoot);
+  const app = createApp({
+    template: '<span class="pass">✅ Vue mount works: {{msg}}</span>',
+    setup() { return { msg: ref('hello') }; }
+  });
+  app.mount(testRoot);
+  await new Promise(r => setTimeout(r, 100));
+  if (testRoot.textContent.includes('hello')) {
+    pass('Vue mount: template rendering OK');
+  } else {
+    fail(`Vue mount: unexpected output "${testRoot.textContent}"`);
+  }
+} catch(e) {
+  fail(`Vue mount failed: ${e.message}\n${e.stack}`);
+}
+
+// Test 3: Axios
+try {
+  const axios = (await import('axios')).default;
+  pass(`Axios CDN: loaded, version check passed`);
+} catch(e) {
+  fail(`Axios CDN import failed: ${e.message}`);
+}
+
+// Test 4: API connectivity
+try {
+  const axios = (await import('axios')).default;
+  const r = await axios.post('/service/zyx/auth/login', { username: 'admin', password: 'admin123' });
+  if (r.data.code === 0 && r.data.data.token) {
+    pass('API login: OK, got JWT token');
+  } else {
+    fail(`API login: unexpected response ${JSON.stringify(r.data)}`);
+  }
+} catch(e) {
+  fail(`API login failed: ${e.message}`);
+}
+
+// Test 5: Import our app modules
+try {
+  const m = await import('/js/app.js');
+  pass('App module: imported without error');
+  info(`  Exports: ${Object.keys(m).join(', ') || '(none - side-effect module)'}`);
+} catch(e) {
+  fail(`App module import failed: ${e.message}\n${e.stack}`);
+}
+</script></body></html>

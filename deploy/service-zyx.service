@@ -1,0 +1,15 @@
+[Unit]
+Description=Service XYZ API Management Console
+After=network.target mysql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/service-zyx
+EnvironmentFile=/opt/service-zyx/.env
+ExecStart=/usr/bin/python3 -m uvicorn server.main:app --host 0.0.0.0 --port 8800
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

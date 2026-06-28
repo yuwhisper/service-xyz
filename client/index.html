@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Service XYZ</title>
+<link rel="stylesheet" href="/css/app.css"/>
+<script type="importmap">
+{
+  "imports": {
+    "vue": "https://esm.sh/vue@3.4.21/dist/vue.esm-browser.js",
+    "axios": "https://esm.sh/axios@1.7.2"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app"><div id="fallback-msg" style="padding:40px;font-family:monospace;font-size:14px;color:#86909c">⏳ Loading application...</div></div>
+<script>
+window.onerror = function(msg, url, line, col, err) {
+  var el = document.getElementById('fallback-msg');
+  if (el) {
+    el.innerHTML = '<div style="color:#f53f3f;font-size:14px;margin-bottom:8px">❌ JS Error</div>' +
+      '<div style="background:#1a1d24;color:#c9d1d9;padding:16px;border-radius:8px;font-size:12px;line-height:1.7;white-space:pre-wrap">' +
+      msg + '\n\nFile: ' + url + ':' + line + ':' + col + '\n\n' + (err&&err.stack||'') + '</div>';
+  }
+};
+</script>
+<script type="module" src="/js/app.js"></script>
+</body>
+</html>
