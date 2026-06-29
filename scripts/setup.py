@@ -103,6 +103,13 @@ async def setup():
             "/service/zyx/dingtalk/dingpan/upload",
             "json",
         ),
+        (
+            "聚水潭获取Token",
+            "获取或刷新聚水潭 OpenAPI access_token",
+            "GET",
+            "/service/zyx/jst/gettoken",
+            "none",
+        ),
     ]
     for name, desc, method, path, body_type in builtins:
         exists = await execute_one(

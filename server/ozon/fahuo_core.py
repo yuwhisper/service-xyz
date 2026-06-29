@@ -933,35 +933,14 @@ def enrich_box_meta_with_cargo_ids(box_meta, cargo_ids):
 
 
 def fetch_product_details(skus, db_config=None):
-    """从商品资料明细表批量查询图片与运营成本价（单价）。"""
+    """从聚水潭 API 批量查询图片 URL（pic）与运营成本价（other_price_5）。"""
+    del db_config  # 保留参数兼容旧调用，已不再读 MySQL 商品资料表
+    from server.jushuitan.client import query_skus
+
     unique_skus = list(dict.fromkeys(s for s in skus if s))
     if not unique_skus:
         return {}
-    cfg = db_config or DB_CONFIG
-    conn = pymysql.connect(**cfg)
-    try:
-        with conn.cursor(pymysql.cursors.DictCursor) as cursor:
-            placeholders = ", ".join(["%s"] * len(unique_skus))
-            cursor.execute(
-                f"""
-                SELECT 商品编码, 图片, 运营成本价
-                FROM `商品资料明细表`
-                WHERE 商品编码 IN ({placeholders})
-                """,
-                unique_skus,
-            )
-            rows = cursor.fetchall()
-    finally:
-        conn.close()
-    result = {}
-    for row in rows:
-        code = (row.get("商品编码") or "").strip()
-        if code:
-            result[code] = {
-                "image_url": (row.get("图片") or "").strip(),
-                "freight_price": row.get("运营成本价"),
-            }
-    return result
+    return query_skus(unique_skus)
 
 
 def _excel_num(value):
@@ -1276,7 +1255,7 @@ def export_batch_excel_reports(
         }
     )
     if missing:
-        print(f"⚠️ 商品资料明细表未找到: {', '.join(missing[:8])}" + (
+        print(f"⚠️ 聚水潭未找到商品资料: {', '.join(missing[:8])}" + (
             f" 等共 {len(missing)} 个 SKU" if len(missing) > 8 else ""
         ))
 

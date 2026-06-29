@@ -107,6 +107,8 @@ python server/main.py
 | POST | /service/zyx/ozon/fahuo | — | Ozon FBO 发货（后台任务） |
 | GET | /service/zyx/ozon/fahuo/status/:job_id | — | Ozon 发货任务状态 |
 | POST | /service/zyx/dingtalk/dingpan/upload | — | 钉钉钉盘上传 |
+| GET | /service/zyx/jst/gettoken | — | 聚水潭 access_token |
+| POST | /service/zyx/jst/gettoken | — | 聚水潭 access_token（可传 code/force） |
 
 ## 数据库
 

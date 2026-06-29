@@ -1,0 +1,220 @@
+"""Jushuitan OpenAPI client — token + SKU query."""
+from __future__ import annotations
+
+import hashlib
+import json
+import threading
+import time
+from typing import Any
+
+import requests
+
+from server.jushuitan.config import (
+    ACCESS_TOKEN,
+    ACCESS_TOKEN_PATH,
+    APP_KEY,
+    APP_SECRET,
+    AUTH_CODE,
+    INIT_TOKEN_PATH,
+    OPENAPI_BASE,
+    REFRESH_TOKEN,
+    REFRESH_TOKEN_PATH,
+    SKU_QUERY_BATCH_SIZE,
+    SKU_QUERY_PATH,
+)
+
+NO_PROXY = {"http": None, "https": None}
+
+_token_lock = threading.Lock()
+_cached_access_token = ""
+_cached_refresh_token = REFRESH_TOKEN or ""
+_token_expires_at = 0.0
+
+
+def _sign(params: dict[str, Any]) -> str:
+    sign_str = APP_SECRET + "".join(
+        f"{k}{params[k]}" for k in sorted(params.keys()) if k != "sign"
+    )
+    return hashlib.md5(sign_str.encode("utf-8")).hexdigest()
+
+
+def _post_form(path: str, params: dict[str, Any]) -> dict[str, Any]:
+    if not APP_KEY or not APP_SECRET:
+        raise ValueError("聚水潭凭证未配置（JUSHUITAN_APP_KEY/SECRET）")
+    payload = dict(params)
+    payload.setdefault("app_key", APP_KEY)
+    payload.setdefault("charset", "utf-8")
+    payload.setdefault("timestamp", int(time.time()))
+    payload["sign"] = _sign(payload)
+    url = OPENAPI_BASE.rstrip("/") + path
+    resp = requests.post(
+        url,
+        data=payload,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        proxies=NO_PROXY,
+        timeout=30,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if not isinstance(data, dict):
+        raise RuntimeError(f"聚水潭响应格式异常: {data!r}")
+    if data.get("code") != 0:
+        raise RuntimeError(
+            f"聚水潭接口失败 [{data.get('code')}]: {data.get('msg') or data}"
+        )
+    return data
+
+
+def _apply_token_response(data: dict[str, Any], source: str) -> dict[str, Any]:
+    global _cached_access_token, _cached_refresh_token, _token_expires_at
+    token_data = data.get("data") or {}
+    access_token = (token_data.get("access_token") or "").strip()
+    if not access_token:
+        raise RuntimeError(f"聚水潭未返回 access_token: {data}")
+    refresh_token = (token_data.get("refresh_token") or "").strip()
+    expires_in = token_data.get("expires_in")
+    _cached_access_token = access_token
+    if refresh_token:
+        _cached_refresh_token = refresh_token
+    if expires_in:
+        try:
+            _token_expires_at = time.time() + max(int(expires_in) - 300, 60)
+        except (TypeError, ValueError):
+            _token_expires_at = time.time() + 3600
+    else:
+        _token_expires_at = time.time() + 86400 * 30
+    return _token_payload(source, expires_in=expires_in)
+
+
+def _token_payload(source: str, expires_in: Any = None) -> dict[str, Any]:
+    return {
+        "access_token": _cached_access_token,
+        "refresh_token": _cached_refresh_token or None,
+        "expires_in": expires_in,
+        "expires_at": int(_token_expires_at) if _token_expires_at else None,
+        "source": source,
+    }
+
+
+def _fetch_init_token(code: str | None = None) -> dict[str, Any]:
+    auth_code = (code or AUTH_CODE or "").strip()
+    if not auth_code:
+        raise ValueError(
+            "聚水潭 access_token 未配置，且缺少授权 code 无法换取令牌"
+        )
+    data = _post_form(
+        INIT_TOKEN_PATH,
+        {
+            "grant_type": "authorization_code",
+            "code": auth_code,
+        },
+    )
+    return _apply_token_response(data, "init_token")
+
+
+def _fetch_access_token_by_code(code: str | None = None) -> dict[str, Any]:
+    auth_code = (code or AUTH_CODE or "").strip()
+    if not auth_code:
+        raise ValueError("缺少聚水潭授权 code")
+    data = _post_form(
+        ACCESS_TOKEN_PATH,
+        {
+            "grant_type": "authorization_code",
+            "code": auth_code,
+        },
+    )
+    return _apply_token_response(data, "access_token")
+
+
+def _refresh_access_token() -> dict[str, Any]:
+    if not _cached_refresh_token:
+        raise ValueError("缺少 JUSHUITAN_REFRESH_TOKEN，无法刷新 access_token")
+    data = _post_form(
+        REFRESH_TOKEN_PATH,
+        {
+            "grant_type": "refresh_token",
+            "refresh_token": _cached_refresh_token,
+            "scope": "all",
+        },
+    )
+    return _apply_token_response(data, "refresh_token")
+
+
+def fetch_token_info(*, force: bool = False, code: str | None = None) -> dict[str, Any]:
+    """获取聚水潭 access_token；force=True 时忽略缓存重新换取。"""
+    global _cached_access_token, _token_expires_at
+    with _token_lock:
+        if force:
+            _cached_access_token = ""
+            _token_expires_at = 0.0
+
+        if ACCESS_TOKEN and not _cached_access_token and not force:
+            _cached_access_token = ACCESS_TOKEN
+            _token_expires_at = time.time() + 86400 * 365
+            return _token_payload("env")
+
+        if _cached_access_token and time.time() < _token_expires_at and not force:
+            return _token_payload("cached")
+
+        errors: list[str] = []
+        if _cached_refresh_token and not code:
+            try:
+                return _refresh_access_token()
+            except Exception as e:
+                errors.append(f"refresh: {e}")
+
+        for fetcher in (
+            lambda: _fetch_init_token(code),
+            lambda: _fetch_access_token_by_code(code),
+        ):
+            try:
+                return fetcher()
+            except Exception as e:
+                errors.append(str(e))
+
+        if ACCESS_TOKEN:
+            _cached_access_token = ACCESS_TOKEN
+            _token_expires_at = time.time() + 86400 * 365
+            return _token_payload("env")
+
+        raise RuntimeError("获取聚水潭 access_token 失败: " + " | ".join(errors))
+
+
+def get_access_token() -> str:
+    return fetch_token_info()["access_token"]
+
+
+def query_skus(sku_ids: list[str]) -> dict[str, dict[str, Any]]:
+    """Batch query SKU details; returns {sku: {image_url, freight_price}}."""
+    unique = list(dict.fromkeys(s.strip() for s in sku_ids if s and str(s).strip()))
+    if not unique:
+        return {}
+
+    result: dict[str, dict[str, Any]] = {}
+    token = get_access_token()
+
+    for i in range(0, len(unique), SKU_QUERY_BATCH_SIZE):
+        batch = unique[i : i + SKU_QUERY_BATCH_SIZE]
+        biz_data = {
+            "sku_ids": ",".join(batch),
+            "page_index": 1,
+            "page_size": max(len(batch), 1),
+        }
+        params = {
+            "access_token": token,
+            "timestamp": int(time.time()),
+            "version": "2",
+            "biz": json.dumps(biz_data, ensure_ascii=False),
+        }
+        data = _post_form(SKU_QUERY_PATH, params)
+        for item in (data.get("data") or {}).get("datas") or []:
+            sku_id = (item.get("sku_id") or item.get("i_id") or "").strip()
+            if not sku_id:
+                continue
+            pic = (item.get("pic") or "").strip()
+            price = item.get("other_price_5")
+            result[sku_id] = {
+                "image_url": pic,
+                "freight_price": price,
+            }
+    return result
