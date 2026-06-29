@@ -86,6 +86,7 @@ def _finalize_result(
         "reason": reason,
         "success": success,
         "failed": failed,
+        "file_ids": [],
     }
     if extra:
         result.update(extra)

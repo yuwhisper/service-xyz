@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import time
@@ -12,6 +13,39 @@ from server.database import execute, execute_one, execute_insert, execute_update
 router = APIRouter(prefix="/service/zyx/apis", tags=["apis"])
 
 INTERNAL_API_BASE = os.getenv("INTERNAL_API_BASE", f"http://127.0.0.1:{PORT}")
+FAHUO_STATUS_PATH = "/service/zyx/ozon/fahuo/status"
+FAHUO_POLL_INTERVAL_SEC = 2
+FAHUO_POLL_TIMEOUT_SEC = 600
+
+
+async def _wait_fahuo_job_result(session: aiohttp.ClientSession, resp_body: str) -> str:
+    try:
+        parsed = json.loads(resp_body)
+    except json.JSONDecodeError:
+        return resp_body
+    data = parsed.get("data") or {}
+    if data.get("job_status") != "running":
+        return resp_body
+    job_id = data.get("job_id")
+    if not job_id:
+        return resp_body
+
+    status_url = INTERNAL_API_BASE.rstrip("/") + f"{FAHUO_STATUS_PATH}/{job_id}"
+    deadline = time.time() + FAHUO_POLL_TIMEOUT_SEC
+    while time.time() < deadline:
+        await asyncio.sleep(FAHUO_POLL_INTERVAL_SEC)
+        try:
+            async with session.get(status_url) as status_resp:
+                body = await status_resp.text()
+        except Exception:
+            continue
+        try:
+            status_data = json.loads(body).get("data") or {}
+        except json.JSONDecodeError:
+            continue
+        if status_data.get("job_status") != "running":
+            return body
+    return resp_body
 
 
 # --------------- Schema ---------------
@@ -112,22 +146,28 @@ async def execute_api(api_id: int, body: ExecuteBody):
     else:
         req_kwargs["params"] = body.params
 
+    is_fahuo = api["path"].rstrip("/").endswith("/ozon/fahuo")
+
     try:
         async with aiohttp.ClientSession() as session:
             async with session.request(method, url, **req_kwargs) as resp:
                 resp_body = await resp.text()
                 status = resp.status
+            if is_fahuo:
+                resp_body = await _wait_fahuo_job_result(session, resp_body)
     except Exception as e:
         resp_body = str(e)
         status = 0
 
     duration = int((time.time() - start) * 1000)
 
-    log_id = await execute_insert(
-        "INSERT INTO api_logs (api_id, request_params, response_body, status_code, duration_ms, triggered_by) "
-        "VALUES (%s,%s,%s,%s,%s,'manual')",
-        (api_id, json.dumps(body.params), resp_body[:5000], status, duration),
-    )
+    log_id = None
+    if not is_fahuo:
+        log_id = await execute_insert(
+            "INSERT INTO api_logs (api_id, request_params, response_body, status_code, duration_ms, triggered_by) "
+            "VALUES (%s,%s,%s,%s,%s,'manual')",
+            (api_id, json.dumps(body.params), resp_body[:5000], status, duration),
+        )
 
     return {
         "code": 0,

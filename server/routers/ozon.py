@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Body, HTTPException
+from fastapi import APIRouter, Body, HTTPException
 from pydantic import BaseModel, Field
 
 from server.database import execute_insert, execute_one
@@ -71,10 +71,16 @@ def _get_job(job_id: str) -> dict | None:
         return dict(job) if job else None
 
 
-def _run_job(job_id: str, params: dict) -> None:
+async def _run_job_async(job_id: str, params: dict) -> None:
     try:
-        result = run_fahuo(params)
+        result = await asyncio.to_thread(run_fahuo, params)
         _set_job(job_id, status="done", job_status="done", **result)
+        data = {"job_id": job_id, "job_status": "done", **result}
+        await _log_fahuo_call(
+            params,
+            json.dumps({"code": 0, "data": data}, ensure_ascii=False),
+            200,
+        )
     except Exception as e:
         _set_job(
             job_id,
@@ -86,6 +92,23 @@ def _run_job(job_id: str, params: dict) -> None:
             reason=str(e),
             success=[],
             failed=[],
+            file_ids=[],
+        )
+        data = {
+            "job_id": job_id,
+            "job_status": "failed",
+            "error": str(e),
+            "run_status": "failed",
+            "executed": True,
+            "reason": str(e),
+            "success": [],
+            "failed": [],
+            "file_ids": [],
+        }
+        await _log_fahuo_call(
+            params,
+            json.dumps({"code": 0, "data": data}, ensure_ascii=False),
+            200,
         )
 
 
@@ -94,9 +117,6 @@ def _format_job_data(job: dict) -> dict[str, Any]:
     job_status = job.get("job_status") or job.get("status", "unknown")
     data["job_status"] = job_status
 
-    if job_status == "running":
-        return data
-
     if job_status == "failed":
         data["error"] = job.get("error")
         data["run_status"] = job.get("run_status", "failed")
@@ -104,6 +124,11 @@ def _format_job_data(job: dict) -> dict[str, Any]:
         data["reason"] = job.get("reason") or job.get("error")
         data["success"] = job.get("success", [])
         data["failed"] = job.get("failed", [])
+        data["file_ids"] = job.get("file_ids", [])
+        return data
+
+    if job_status == "running":
+        data["file_ids"] = []
         return data
 
     for key in _RESULT_KEYS:
@@ -115,6 +140,8 @@ def _format_job_data(job: dict) -> dict[str, Any]:
                 data[key] = job["result"][key]
     if "updated_at" in job:
         data["updated_at"] = job["updated_at"]
+    if "file_ids" not in data:
+        data["file_ids"] = []
     return data
 
 
@@ -134,7 +161,6 @@ async def _log_fahuo_call(request_params: dict, response_body: str, status_code:
 
 @router.post("/fahuo")
 async def start_fahuo(
-    background_tasks: BackgroundTasks,
     body: FahuoBody = Body(default_factory=FahuoBody),
 ):
     params = _runner_params(body)
@@ -152,10 +178,8 @@ async def start_fahuo(
         return resp
 
     _set_job(job_id, status="running", job_status="running", params=params)
-    background_tasks.add_task(_run_job, job_id, params)
-    resp = {"code": 0, "data": {"job_id": job_id, "job_status": "running"}}
-    await _log_fahuo_call(params, json.dumps(resp, ensure_ascii=False), 200)
-    return resp
+    asyncio.create_task(_run_job_async(job_id, params))
+    return {"code": 0, "data": {"job_id": job_id, "job_status": "running"}}
 
 
 @router.get("/fahuo/status/{job_id}")
