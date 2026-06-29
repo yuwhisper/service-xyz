@@ -155,7 +155,17 @@ MySQL 远程服务器 `121.43.75.44:3306`，库名 `zyx`。
 
 **内部路径**（以 `/service/` 开头）：调度执行时由 [`server/routers/apis.py`](server/routers/apis.py) 转发到本机 `http://127.0.0.1:8800`。全站免 JWT，影刀等外部系统可直接 POST，无需 Headers。
 
-**影刀调用 Ozon 发货：** POST `https://www.ywzhaoran.xyz/service/zyx/ozon/fahuo`，协议头 `Content-Type: application/json`，协议体 `{}`。
+**影刀调用 Ozon 发货（推荐同步 `wait=true`）：**
+
+- POST `https://www.ywzhaoran.xyz/service/zyx/ozon/fahuo`
+- 协议头：`Content-Type: application/json`
+- 协议体：`{"wait": true}`
+- 成功唯一ID 列表：响应 JSON 的 `data.success`（字符串数组）
+- `run_status`：`success` 全成功 / `partial` 部分成功 / `failed` 全失败 / `skipped` 未执行（如无当天数据）
+- `executed=false` 时看 `reason` 了解未执行原因
+- HTTP 始终 200，`code` 始终 0；部分成功用 `run_status: partial` 区分
+
+异步模式：协议体 `{}` 或 `{"wait": false}` → 取 `data.job_id` → GET `/ozon/fahuo/status/{job_id}` 直到 `job_status=done`
 
 **检查清单（每次新增 API）：**
 

@@ -55,10 +55,53 @@ def _upload_order_dir_to_dingpan(
     )
 
 
+def _finalize_result(
+    success: list[str],
+    failed: list[dict],
+    *,
+    executed: bool,
+    reason: str | None = None,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    success = list(dict.fromkeys(success))
+    failed_ids = {item["id"] for item in failed if item.get("id")}
+    success = [uid for uid in success if uid not in failed_ids]
+
+    if not executed:
+        run_status = "skipped"
+    elif success and failed:
+        run_status = "partial"
+    elif success:
+        run_status = "success"
+    elif failed:
+        run_status = "failed"
+        if reason is None:
+            reason = f"共 {len(failed)} 条处理失败"
+    else:
+        run_status = "success"
+
+    result: dict[str, Any] = {
+        "run_status": run_status,
+        "executed": executed,
+        "reason": reason,
+        "success": success,
+        "failed": failed,
+    }
+    if extra:
+        result.update(extra)
+    return result
+
+
+def _ship_date_label(ship_date: date | None) -> str:
+    d = ship_date or datetime.now().date()
+    return d.strftime("%Y-%m-%d")
+
+
 def _run_full(params: dict[str, Any]) -> dict[str, Any]:
     drop_off = params.get("drop_off_warehouse_name") or DEFAULT_CROSSDOCK_DROP_OFF_NAME
     ship_date = _parse_ship_date(params.get("ship_date"))
     upload_dingpan = _should_upload_dingpan(params)
+    date_label = _ship_date_label(ship_date)
 
     success: list[str] = []
     failed: list[dict] = []
@@ -67,10 +110,20 @@ def _run_full(params: dict[str, Any]) -> dict[str, Any]:
     try:
         groups = core.fetch_pending_shipment_groups(ship_date=ship_date)
     except Exception as e:
-        return {"success": [], "failed": [{"id": "", "reason": f"读取数据库失败: {e}"}]}
+        return _finalize_result(
+            [],
+            [{"id": "", "reason": f"读取数据库失败: {e}"}],
+            executed=False,
+            reason=f"读取数据库失败: {e}",
+        )
 
     if not groups:
-        return {"success": [], "failed": [], "dingpan_uploads": []}
+        return _finalize_result(
+            [],
+            [],
+            executed=False,
+            reason=f"今日无待发货记录（运营发货日期={date_label}，发货状态为空）",
+        )
 
     bundle_map: dict = defaultdict(list)
     for group in groups:
@@ -150,13 +203,8 @@ def _run_full(params: dict[str, Any]) -> dict[str, Any]:
                     f"钉盘上传失败: {e}",
                 )
 
-    success = list(dict.fromkeys(success))
-    failed_ids = {item["id"] for item in failed if item.get("id")}
-    success = [uid for uid in success if uid not in failed_ids]
-    result: dict[str, Any] = {"success": success, "failed": failed}
-    if dingpan_uploads:
-        result["dingpan_uploads"] = dingpan_uploads
-    return result
+    extra = {"dingpan_uploads": dingpan_uploads} if dingpan_uploads else None
+    return _finalize_result(success, failed, executed=True, extra=extra)
 
 
 def _run_resume(params: dict[str, Any]) -> dict[str, Any]:
@@ -166,10 +214,12 @@ def _run_resume(params: dict[str, Any]) -> dict[str, Any]:
     shop = (params.get("shop") or "").strip()
     batch = (params.get("batch") or "").strip()
     if not shop or not batch:
-        return {
-            "success": [],
-            "failed": [{"id": "", "reason": "续传模式需要 shop 与 batch"}],
-        }
+        return _finalize_result(
+            [],
+            [{"id": "", "reason": "续传模式需要 shop 与 batch"}],
+            executed=False,
+            reason="续传模式需要 shop 与 batch",
+        )
 
     ship_date = _parse_ship_date(params.get("ship_date")) or datetime.now().date()
     try:
@@ -187,17 +237,24 @@ def _run_resume(params: dict[str, Any]) -> dict[str, Any]:
         )
         cluster = core.cluster_folder_label(clusters) if clusters else ""
     except Exception as e:
-        return {"success": [], "failed": [{"id": "", "reason": f"读取批次失败: {e}"}]}
+        return _finalize_result(
+            [],
+            [{"id": "", "reason": f"读取批次失败: {e}"}],
+            executed=False,
+            reason=f"读取批次失败: {e}",
+        )
 
     row_ids = _row_ids(rows)
     order_id = None
 
     if params.get("all_supplies"):
         if not params.get("order_id"):
-            return {
-                "success": [],
-                "failed": [{"id": "", "reason": "--all-supplies 需要 order_id"}],
-            }
+            return _finalize_result(
+                [],
+                [{"id": "", "reason": "--all-supplies 需要 order_id"}],
+                executed=False,
+                reason="--all-supplies 需要 order_id",
+            )
         order_id = core.run_resume_merged_cargoes(
             target_shop=shop,
             order_id=int(params["order_id"]),
@@ -212,10 +269,12 @@ def _run_resume(params: dict[str, Any]) -> dict[str, Any]:
         )
     elif params.get("supply_ids"):
         if not params.get("order_id"):
-            return {
-                "success": [],
-                "failed": [{"id": "", "reason": "supply_ids 需要 order_id"}],
-            }
+            return _finalize_result(
+                [],
+                [{"id": "", "reason": "supply_ids 需要 order_id"}],
+                executed=False,
+                reason="supply_ids 需要 order_id",
+            )
         order_id = core.run_resume_merged_cargoes(
             target_shop=shop,
             order_id=int(params["order_id"]),
@@ -230,15 +289,17 @@ def _run_resume(params: dict[str, Any]) -> dict[str, Any]:
         )
     else:
         if not params.get("supply_id") or not params.get("order_id"):
-            return {
-                "success": [],
-                "failed": [
+            return _finalize_result(
+                [],
+                [
                     {
                         "id": "",
                         "reason": "续传需要 order_id 与 supply_id，或 all_supplies",
                     }
                 ],
-            }
+                executed=False,
+                reason="续传需要 order_id 与 supply_id，或 all_supplies",
+            )
         order_id = core.run_resume_cargoes_only(
             target_shop=shop,
             supply_id=int(params["supply_id"]),
@@ -258,12 +319,13 @@ def _run_resume(params: dict[str, Any]) -> dict[str, Any]:
     else:
         _fail_rows(failed, rows, "续传失败")
 
-    return {"success": success, "failed": failed}
+    return _finalize_result(success, failed, executed=True)
 
 
 def run_fahuo(params: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Run Ozon shipment workflow; returns {success, failed, dingpan_uploads?}."""
-    params = params or {}
+    """Run Ozon shipment; returns run_status/executed/reason/success/failed."""
+    params = dict(params or {})
+    params.pop("wait", None)
     if params.get("resume_cargoes"):
         return _run_resume(params)
     return _run_full(params)
