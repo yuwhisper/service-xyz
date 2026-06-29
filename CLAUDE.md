@@ -168,6 +168,8 @@ MySQL 远程服务器 `121.43.75.44:3306`，库名 `zyx`。
 
 异步模式：协议体 `{}` 或 `{"wait": false}` → 取 `data.job_id` → GET `/ozon/fahuo/status/{job_id}` 直到 `job_status=done`
 
+**长耗时说明：** 有数据时发货+压缩+钉盘上传可能超过 1 分钟。`wait: true` 经 Nginx 需 `proxy_read_timeout` ≥ 1800s（见 `deploy/nginx-domain-service-zyx.conf`）。若仍超时，可改用异步 `wait: false` 并轮询 status。
+
 **检查清单（每次新增 API）：**
 
 - [ ] FastAPI 路由已注册（`server/routers/` + `main.py`）
