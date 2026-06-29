@@ -12,12 +12,14 @@ client/dist/
 .env
 .env.local
 .env.*.local
+deploy/.env.server
 config.json
 
 # Runtime
 log/
 *.log
 init.lock
+ozon-fahuo-data/
 
 # IDE
 .idea/
@@ -60,5 +62,6 @@ __pycache__/
 scripts/deploy_server.py
 scripts/update_nginx.py
 scripts/sync_server.py
+scripts/patch_domain_nginx.py
 scripts/fix_nginx_api.py
 scripts/inspect_nginx.py
