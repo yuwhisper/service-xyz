@@ -27,6 +27,11 @@ class FahuoBody(BaseModel):
         description="运营发货日期 YYYY-MM-DD，默认今天",
     )
     drop_off_warehouse_name: str | None = None
+    upload_to_dingpan: bool = True
+    dingpan_folder_url: str | None = Field(
+        default=None,
+        description="钉盘文件夹链接，不传则用 DINGTALK_DEFAULT_FOLDER_URL",
+    )
 
 
 def _set_job(job_id: str, **kwargs) -> None:

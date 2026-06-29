@@ -6,6 +6,8 @@ from collections import defaultdict
 from datetime import date, datetime
 from typing import Any
 
+from server.dingtalk.config import OZON_UPLOAD_DINGPAN
+from server.dingtalk.dingpan import upload_directory_as_zip
 from server.ozon import fahuo_core as core
 from server.ozon.config import DEFAULT_CROSSDOCK_DROP_OFF_NAME
 
@@ -35,12 +37,32 @@ def _fail_rows(failed: list[dict], rows, reason: str) -> None:
         failed.append({"id": uid, "reason": reason})
 
 
+def _should_upload_dingpan(params: dict[str, Any]) -> bool:
+    if "upload_to_dingpan" in params:
+        return bool(params.get("upload_to_dingpan"))
+    return OZON_UPLOAD_DINGPAN
+
+
+def _upload_order_dir_to_dingpan(
+    order_dir: str,
+    params: dict[str, Any],
+) -> dict[str, Any]:
+    folder_url = params.get("dingpan_folder_url") or None
+    return upload_directory_as_zip(
+        order_dir,
+        folder_url=folder_url,
+        delete_zip_after=True,
+    )
+
+
 def _run_full(params: dict[str, Any]) -> dict[str, Any]:
     drop_off = params.get("drop_off_warehouse_name") or DEFAULT_CROSSDOCK_DROP_OFF_NAME
     ship_date = _parse_ship_date(params.get("ship_date"))
+    upload_dingpan = _should_upload_dingpan(params)
 
     success: list[str] = []
     failed: list[dict] = []
+    dingpan_uploads: list[dict] = []
 
     try:
         groups = core.fetch_pending_shipment_groups(ship_date=ship_date)
@@ -48,7 +70,7 @@ def _run_full(params: dict[str, Any]) -> dict[str, Any]:
         return {"success": [], "failed": [{"id": "", "reason": f"读取数据库失败: {e}"}]}
 
     if not groups:
-        return {"success": [], "failed": []}
+        return {"success": [], "failed": [], "dingpan_uploads": []}
 
     bundle_map: dict = defaultdict(list)
     for group in groups:
@@ -110,11 +132,31 @@ def _run_full(params: dict[str, Any]) -> dict[str, Any]:
                 all_rows,
                 f"发货包 {shipper}+{shop}+{batch_or_order} 总表合并失败: {e}",
             )
+            continue
+
+        if upload_dingpan:
+            try:
+                upload_result = _upload_order_dir_to_dingpan(order_dir, params)
+                dingpan_uploads.append(
+                    {
+                        "order_dir": order_dir,
+                        **upload_result,
+                    }
+                )
+            except Exception as e:
+                _fail_rows(
+                    failed,
+                    all_rows,
+                    f"钉盘上传失败: {e}",
+                )
 
     success = list(dict.fromkeys(success))
     failed_ids = {item["id"] for item in failed if item.get("id")}
     success = [uid for uid in success if uid not in failed_ids]
-    return {"success": success, "failed": failed}
+    result: dict[str, Any] = {"success": success, "failed": failed}
+    if dingpan_uploads:
+        result["dingpan_uploads"] = dingpan_uploads
+    return result
 
 
 def _run_resume(params: dict[str, Any]) -> dict[str, Any]:
@@ -220,7 +262,7 @@ def _run_resume(params: dict[str, Any]) -> dict[str, Any]:
 
 
 def run_fahuo(params: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Run Ozon shipment workflow; returns {success: [...], failed: [{id, reason}]}."""
+    """Run Ozon shipment workflow; returns {success, failed, dingpan_uploads?}."""
     params = params or {}
     if params.get("resume_cargoes"):
         return _run_resume(params)

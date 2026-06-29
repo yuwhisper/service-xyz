@@ -87,6 +87,36 @@ async def setup():
             )
         print("[setup] Demo APIs seeded")
 
+    # Register built-in service APIs (idempotent by path)
+    builtins = [
+        (
+            "Ozon FBO 发货",
+            "读取今日待发货登记并自动申请 Ozon 供货单",
+            "POST",
+            "/service/zyx/ozon/fahuo",
+            "json",
+        ),
+        (
+            "钉钉钉盘上传",
+            "压缩并上传服务器本地文件/目录到钉盘",
+            "POST",
+            "/service/zyx/dingtalk/dingpan/upload",
+            "json",
+        ),
+    ]
+    for name, desc, method, path, body_type in builtins:
+        exists = await execute_one(
+            "SELECT id FROM interfaces WHERE project_id=%s AND path=%s",
+            (pid, path),
+        )
+        if not exists:
+            await execute_insert(
+                "INSERT INTO interfaces (project_id,name,description,method,path,body_type,status) "
+                "VALUES (%s,%s,%s,%s,%s,%s,'published')",
+                (pid, name, desc, method, path, body_type),
+            )
+            print(f"[setup] Registered builtin API: {name}")
+
     print("[setup] Done!")
 
 

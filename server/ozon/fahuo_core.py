@@ -160,7 +160,7 @@ def is_moscow_cluster(cluster_name):
 
 def build_order_output_dir(shipper, shop, batch_or_order, archive_date=None):
     """
-    输出目录：Z:\\...\\自动发货存档\\{当天日期}\\{发货人}+{店铺}+{批次号或订单号}
+    输出目录：{存档根}/{YYYY-MM-DD}+{发货人}+{店铺}+{批次号或订单号}
     同一单号下直发/中转合并输出总箱唛与 Excel。
     """
     if archive_date is None:
@@ -171,8 +171,8 @@ def build_order_output_dir(shipper, shop, batch_or_order, archive_date=None):
     shipper_text = sanitize_folder_name(shipper or "未知发货人")
     shop_text = sanitize_folder_name(shop or "未知店铺")
     tag_text = sanitize_folder_name(batch_or_order or "未知单号")
-    folder_name = f"{shipper_text}+{shop_text}+{tag_text}"
-    return os.path.join(SHIPMENT_ARCHIVE_ROOT, date_str, folder_name)
+    folder_name = f"{date_str}+{shipper_text}+{shop_text}+{tag_text}"
+    return os.path.join(SHIPMENT_ARCHIVE_ROOT, folder_name)
 
 
 def item_meta_kwargs(item):

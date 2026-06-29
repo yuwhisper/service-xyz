@@ -1,4 +1,5 @@
 import json
+import os
 import time
 
 import aiohttp
@@ -6,9 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from server.auth import get_current_user
+from server.config import PORT
 from server.database import execute, execute_one, execute_insert, execute_update
 
 router = APIRouter(prefix="/service/zyx/apis", tags=["apis"])
+
+INTERNAL_API_BASE = os.getenv("INTERNAL_API_BASE", f"http://127.0.0.1:{PORT}")
 
 
 # --------------- Schema ---------------
@@ -93,14 +97,26 @@ async def execute_api(api_id: int, body: ExecuteBody, user=Depends(get_current_u
         raise HTTPException(404, "API not found")
 
     start = time.time()
-    url = api["path"]  # full URL or relative; use as-is for now
+    url = api["path"]
+    if url.startswith("/"):
+        url = INTERNAL_API_BASE.rstrip("/") + url
     method = api["method"].upper()
+    body_type = (api.get("body_type") or "none").lower()
+
+    req_kwargs = {
+        "headers": body.headers,
+        "timeout": aiohttp.ClientTimeout(total=300),
+    }
+    if method in ("GET", "DELETE"):
+        req_kwargs["params"] = body.params
+    elif body_type == "json":
+        req_kwargs["json"] = body.params
+    else:
+        req_kwargs["params"] = body.params
 
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.request(
-                method, url, params=body.params, headers=body.headers, timeout=30
-            ) as resp:
+            async with session.request(method, url, **req_kwargs) as resp:
                 resp_body = await resp.text()
                 status = resp.status
     except Exception as e:

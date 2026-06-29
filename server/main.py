@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response
 
 from server.config import PORT
-from server.routers import auth, dashboard, apis, schedules, ozon
+from server.routers import auth, dashboard, apis, schedules, ozon, dingtalk
 
 app = FastAPI(title="Service XYZ", docs_url=None, redoc_url=None)
 
@@ -29,6 +29,7 @@ app.include_router(dashboard.router)
 app.include_router(apis.router)
 app.include_router(schedules.router)
 app.include_router(ozon.router)
+app.include_router(dingtalk.router)
 
 # Static files — serve entire client directory
 CLIENT = Path(__file__).resolve().parent.parent / "client"

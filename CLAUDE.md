@@ -11,15 +11,17 @@
 ## Git
 
 - 不自动 `git commit` 或 `git push`，除非我明确要求
+- **我说「提交」= `git commit` + `git push`**（本地保存并推送到 GitHub）
 - 提交前先展示将要提交的变更摘要
-- commit message 使用简洁英文
+- commit message 格式：**`yyyy-MM-dd HH:mm` + 我给的名称**（例：`2026-06-29 10:36 修改 README`）
 
 ## 红线操作
 
 以下操作即使在 auto-accept 模式下也必须先问我：
 - 删除文件、目录或 git 历史
 - 修改 `.env`、密钥、token、证书、CI/CD 配置
-- `git push`、`git rebase`、`git reset --hard`、强制推送
+- `git rebase`、`git reset --hard`、强制推送
+- 未经要求不要 `git push`（**我说「提交」时除外**）
 - 公开发布（`npm publish`、生产部署等）
 
 ## 技术栈
@@ -46,7 +48,8 @@ service-xyz/
 │       ├── auth.py          # POST /service/zyx/auth/login
 │       ├── dashboard.py     # GET  /service/zyx/dashboard/stats
 │       ├── apis.py          # CRUD /service/zyx/apis + execute + logs
-│       └── schedules.py     # CRUD /service/zyx/schedules
+│       ├── schedules.py     # CRUD /service/zyx/schedules
+│       └── ozon.py          # POST /service/zyx/ozon/fahuo（示例：内置业务 API）
 ├── client/                  # 前端（纯静态，CDN 加载）
 │   ├── index.html           # 入口 + import map
 │   ├── css/app.css          # 影刀风格样式
@@ -101,6 +104,8 @@ python server/main.py
 | POST | /service/zyx/schedules | ✅ | 创建定时任务 |
 | PUT | /service/zyx/schedules/:id | ✅ | 更新定时任务 |
 | DELETE | /service/zyx/schedules/:id | ✅ | 删除定时任务 |
+| POST | /service/zyx/ozon/fahuo | ✅ | Ozon FBO 发货（后台任务） |
+| GET | /service/zyx/ozon/fahuo/status/:job_id | ✅ | Ozon 发货任务状态 |
 
 ## 数据库
 
@@ -112,6 +117,49 @@ MySQL 远程服务器 `121.43.75.44:3306`，库名 `zyx`。
 - `interfaces` — API 接口定义（method/path/name）
 - `api_logs` — 执行日志（request_params/response_body/status_code/duration_ms）
 - `schedules` — 定时任务（api_id/cron_expression/enabled）
+
+### 新增 API 必须登记 `interfaces` 表
+
+**调度任务**、**定时任务**、**数据中心**里的接口列表，全部来自 MySQL `interfaces` 表（`GET /service/zyx/apis`），**不会**自动扫描 FastAPI 路由。
+
+因此：**每新增一个后端 API（新建 router 或路由）后，必须同步在 `interfaces` 表插入一条记录**，否则控制台里看不到，也无法被调度/定时任务选中。
+
+推荐做法（按 path 幂等，避免重复插入）：
+
+1. 在 [`scripts/setup.py`](scripts/setup.py) 的 `builtins` 列表追加一条，例如：
+
+```python
+(
+    "Ozon FBO 发货",
+    "读取今日待发货登记并自动申请 Ozon 供货单",
+    "POST",
+    "/service/zyx/ozon/fahuo",
+    "json",
+),
+```
+
+2. 执行 `python scripts/setup.py`（本地或服务器 deploy 时都会跑）
+
+字段说明（`interfaces`）：
+
+| 字段 | 说明 |
+|------|------|
+| `project_id` | 默认项目，一般为 `1` |
+| `name` | 控制台显示名称 |
+| `description` | 简要说明 |
+| `method` | `GET` / `POST` / `PUT` / `DELETE` 等 |
+| `path` | 相对路径如 `/service/zyx/ozon/fahuo`，或完整外部 URL |
+| `body_type` | `none` / `json`（POST 且走 JSON body 时用 `json`） |
+| `status` | 固定 `published` |
+
+**内部路径**（以 `/service/` 开头）：调度执行时由 [`server/routers/apis.py`](server/routers/apis.py) 转发到本机 `http://127.0.0.1:8800`；若接口需登录，执行时在 Headers 传入 `Authorization: Bearer <token>`。
+
+**检查清单（每次新增 API）：**
+
+- [ ] FastAPI 路由已注册（`server/routers/` + `main.py`）
+- [ ] `interfaces` 表已插入对应记录（`setup.py` builtins 或手动 SQL）
+- [ ] 已执行 `python scripts/setup.py` 或服务器 `deploy.sh`
+- [ ] 控制台「调度任务 / 定时任务」下拉中能看到该接口
 
 ## 约定
 
