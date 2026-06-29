@@ -8,4 +8,5 @@ aiohttp
 pymysql
 requests
 openpyxl
+Pillow
 pymupdf
