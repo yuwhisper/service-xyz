@@ -1,38 +1,38 @@
 # Service XYZ
 
-API management console (FastAPI + Vue 3 CDN, zero build).
+接口管理后台（FastAPI + Vue 3 CDN，零构建）。
 
-## Local development
+## 本地开发
 
 ```bash
 pip install -r requirements.txt
-cp config.json.example config.json   # edit with your DB credentials
-cp .env.example .env                 # optional overrides
+cp config.json.example config.json   # 填入数据库连接信息
+cp .env.example .env                 # 可选，覆盖环境变量
 python scripts/setup.py
 python server/main.py
 ```
 
-Open http://localhost:3000 — default login: `admin` / `admin123`
+浏览器打开 http://localhost:3000 — 默认账号：`admin` / `admin123`
 
-## Production deploy
+## 生产部署
 
-Server path: `/opt/service-zyx`, port **8800**.
+服务器路径：`/opt/service-zyx`，端口 **8800**。
 
 ```bash
 bash /opt/service-zyx/deploy/deploy.sh
 ```
 
-**Note:** The server may not reach GitHub directly. If `git pull` fails, push from your machine and re-upload via SFTP, or configure a Git proxy/mirror on the server.
+**说明：** 服务器可能无法直接访问 GitHub。若 `git pull` 失败，请在本地 push 后通过 SFTP 上传，或在服务器配置 Git 代理/镜像。
 
-GitHub Actions auto-deploy (optional): add repository secrets `SSH_HOST`, `SSH_USER`, `SSH_KEY`, then push to `main` triggers [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml).
+可选 GitHub Actions 自动部署：在仓库 Secrets 中配置 `SSH_HOST`、`SSH_USER`、`SSH_KEY`，推送到 `main` 后会触发 [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)。
 
-## Access
+## 访问入口
 
-| Entry | Purpose |
-|-------|---------|
-| `https://www.ywzhaoran.xyz/service/zyx/` | Admin UI (SPA) + API |
-| `https://121.43.75.44:8443/` | Admin UI (legacy IP entry) |
+| 地址 | 说明 |
+|------|------|
+| `https://www.ywzhaoran.xyz/service/zyx/` | 管理后台（SPA）+ API |
+| `https://121.43.75.44:8443/` | 管理后台（IP 入口，旧） |
 
-## API prefix
+## API 前缀
 
-All routes under `/service/zyx/` — see `CLAUDE.md` for full list.
+所有接口均在 `/service/zyx/` 下，完整列表见 [`CLAUDE.md`](CLAUDE.md)。
