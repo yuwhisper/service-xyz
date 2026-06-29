@@ -2,10 +2,9 @@ import threading
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 
-from server.auth import get_current_user
 from server.ozon.fahuo_runner import run_fahuo
 
 router = APIRouter(prefix="/service/zyx/ozon", tags=["ozon"])
@@ -59,7 +58,6 @@ def _run_job(job_id: str, params: dict) -> None:
 async def start_fahuo(
     body: FahuoBody,
     background_tasks: BackgroundTasks,
-    user=Depends(get_current_user),  # noqa: B008
 ):
     job_id = str(uuid.uuid4())
     params = body.model_dump(exclude_none=True)
@@ -69,10 +67,7 @@ async def start_fahuo(
 
 
 @router.get("/fahuo/status/{job_id}")
-async def fahuo_status(
-    job_id: str,
-    user=Depends(get_current_user),  # noqa: B008
-):
+async def fahuo_status(job_id: str):
     job = _get_job(job_id)
     if not job:
         raise HTTPException(404, "job not found")

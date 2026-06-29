@@ -30,7 +30,7 @@
 |----|------|------|
 | 后端框架 | FastAPI (Python) | latest |
 | 数据库 | MySQL (远程 121.43.75.44) + aiomysql | — |
-| 认证 | JWT (pyjwt + hashlib.pbkdf2) | — |
+| 认证 | 无（全站 API 免 JWT，供影刀等外部系统直接调用） | — |
 | 前端框架 | React (CDN esm.sh, 零构建) | ^18.3 |
 
 > **注意**: 机器装有绿盾软件，npm 写入的 node_modules 会被透明加密。前端用 CDN import map 加载 React，无本地 node_modules 和构建步骤。
@@ -90,22 +90,23 @@ python server/main.py
 
 | Method | Path | Auth | 说明 |
 |--------|------|:--:|------|
-| POST | /service/zyx/auth/login | — | 登录 |
-| GET | /service/zyx/auth/user/me | ✅ | 当前用户 |
-| GET | /service/zyx/dashboard/stats | ✅ | 概览统计 |
-| GET | /service/zyx/apis | ✅ | 接口列表 |
-| GET | /service/zyx/apis/:id | ✅ | 接口详情 |
-| POST | /service/zyx/apis | ✅ | 创建接口 |
-| PUT | /service/zyx/apis/:id | ✅ | 更新接口 |
-| DELETE | /service/zyx/apis/:id | ✅ | 删除接口 |
-| POST | /service/zyx/apis/:id/execute | ✅ | 执行接口 |
-| GET | /service/zyx/apis/:id/logs | ✅ | 执行日志 |
-| GET | /service/zyx/schedules | ✅ | 定时任务列表 |
-| POST | /service/zyx/schedules | ✅ | 创建定时任务 |
-| PUT | /service/zyx/schedules/:id | ✅ | 更新定时任务 |
-| DELETE | /service/zyx/schedules/:id | ✅ | 删除定时任务 |
-| POST | /service/zyx/ozon/fahuo | ✅ | Ozon FBO 发货（后台任务） |
-| GET | /service/zyx/ozon/fahuo/status/:job_id | ✅ | Ozon 发货任务状态 |
+| POST | /service/zyx/auth/login | — | 登录（可选，非必须） |
+| GET | /service/zyx/auth/user/me | — | 返回 guest |
+| GET | /service/zyx/dashboard/stats | — | 概览统计 |
+| GET | /service/zyx/apis | — | 接口列表 |
+| GET | /service/zyx/apis/:id | — | 接口详情 |
+| POST | /service/zyx/apis | — | 创建接口 |
+| PUT | /service/zyx/apis/:id | — | 更新接口 |
+| DELETE | /service/zyx/apis/:id | — | 删除接口 |
+| POST | /service/zyx/apis/:id/execute | — | 执行接口 |
+| GET | /service/zyx/apis/:id/logs | — | 执行日志 |
+| GET | /service/zyx/schedules | — | 定时任务列表 |
+| POST | /service/zyx/schedules | — | 创建定时任务 |
+| PUT | /service/zyx/schedules/:id | — | 更新定时任务 |
+| DELETE | /service/zyx/schedules/:id | — | 删除定时任务 |
+| POST | /service/zyx/ozon/fahuo | — | Ozon FBO 发货（后台任务） |
+| GET | /service/zyx/ozon/fahuo/status/:job_id | — | Ozon 发货任务状态 |
+| POST | /service/zyx/dingtalk/dingpan/upload | — | 钉钉钉盘上传 |
 
 ## 数据库
 
@@ -152,7 +153,9 @@ MySQL 远程服务器 `121.43.75.44:3306`，库名 `zyx`。
 | `body_type` | `none` / `json`（POST 且走 JSON body 时用 `json`） |
 | `status` | 固定 `published` |
 
-**内部路径**（以 `/service/` 开头）：调度执行时由 [`server/routers/apis.py`](server/routers/apis.py) 转发到本机 `http://127.0.0.1:8800`；若接口需登录，执行时在 Headers 传入 `Authorization: Bearer <token>`。
+**内部路径**（以 `/service/` 开头）：调度执行时由 [`server/routers/apis.py`](server/routers/apis.py) 转发到本机 `http://127.0.0.1:8800`。全站免 JWT，影刀等外部系统可直接 POST，无需 Headers。
+
+**影刀调用 Ozon 发货：** POST `https://www.ywzhaoran.xyz/service/zyx/ozon/fahuo`，协议头 `Content-Type: application/json`，协议体 `{}`。
 
 **检查清单（每次新增 API）：**
 

@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from server.auth import verify_password, create_token, get_current_user
+from server.auth import verify_password, create_token
 from server.database import execute_one, execute_update
 
 router = APIRouter(prefix="/service/zyx/auth", tags=["auth"])
@@ -39,5 +39,5 @@ async def login(body: LoginBody):
 
 
 @router.get("/user/me", tags=["user"])
-async def me(user=Depends(get_current_user)):  # noqa: B008
-    return {"code": 0, "data": user}
+async def me():
+    return {"code": 0, "data": {"username": "guest", "role": "guest"}}

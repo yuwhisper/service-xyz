@@ -1,13 +1,12 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
-from server.auth import get_current_user
 from server.database import execute_one, execute
 
 router = APIRouter(prefix="/service/zyx/dashboard", tags=["dashboard"])
 
 
 @router.get("/stats")
-async def stats(user=Depends(get_current_user)):  # noqa: B008
+async def stats():
     total_apis = await execute_one("SELECT COUNT(*) AS cnt FROM interfaces WHERE status='published'")
     today_calls = await execute_one(
         "SELECT COUNT(*) AS cnt FROM api_logs WHERE DATE(created_at)=CURDATE()"

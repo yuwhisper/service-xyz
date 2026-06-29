@@ -1,7 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel
 
-from server.auth import get_current_user
 from server.database import execute, execute_one, execute_insert, execute_update
 
 router = APIRouter(prefix="/service/zyx/schedules", tags=["schedules"])
@@ -16,7 +15,7 @@ class ScheduleBody(BaseModel):
 
 
 @router.get("")
-async def list_schedules(user=Depends(get_current_user)):  # noqa: B008
+async def list_schedules():
     rows = await execute(
         "SELECT s.*, i.name AS api_name, i.method, i.path "
         "FROM schedules s JOIN interfaces i ON s.api_id=i.id "
@@ -26,7 +25,7 @@ async def list_schedules(user=Depends(get_current_user)):  # noqa: B008
 
 
 @router.post("")
-async def create_schedule(body: ScheduleBody, user=Depends(get_current_user)):  # noqa: B008
+async def create_schedule(body: ScheduleBody):
     sid = await execute_insert(
         "INSERT INTO schedules (api_id,name,cron_expression,params,enabled) VALUES (%s,%s,%s,%s,%s)",
         (body.api_id, body.name, body.cron_expression, body.params, body.enabled),
@@ -36,7 +35,7 @@ async def create_schedule(body: ScheduleBody, user=Depends(get_current_user)):  
 
 
 @router.put("/{schedule_id}")
-async def update_schedule(schedule_id: int, body: ScheduleBody, user=Depends(get_current_user)):  # noqa: B008
+async def update_schedule(schedule_id: int, body: ScheduleBody):
     await execute_update(
         "UPDATE schedules SET api_id=%s,name=%s,cron_expression=%s,params=%s,enabled=%s WHERE id=%s",
         (body.api_id, body.name, body.cron_expression, body.params, body.enabled, schedule_id),
@@ -46,6 +45,6 @@ async def update_schedule(schedule_id: int, body: ScheduleBody, user=Depends(get
 
 
 @router.delete("/{schedule_id}")
-async def delete_schedule(schedule_id: int, user=Depends(get_current_user)):  # noqa: B008
+async def delete_schedule(schedule_id: int):
     await execute_update("DELETE FROM schedules WHERE id=%s", (schedule_id,))
     return {"code": 0, "message": "deleted"}

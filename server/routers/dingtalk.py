@@ -1,7 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from server.auth import get_current_user
 from server.dingtalk.dingpan import upload_directory_as_zip, upload_file
 
 router = APIRouter(prefix="/service/zyx/dingtalk", tags=["dingtalk"])
@@ -17,10 +16,7 @@ class DingpanUploadBody(BaseModel):
 
 
 @router.post("/dingpan/upload")
-async def dingpan_upload(
-    body: DingpanUploadBody,
-    user=Depends(get_current_user),  # noqa: B008
-):
+async def dingpan_upload(body: DingpanUploadBody):
     try:
         if body.as_zip:
             data = upload_directory_as_zip(

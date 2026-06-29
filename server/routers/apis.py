@@ -3,10 +3,9 @@ import os
 import time
 
 import aiohttp
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from server.auth import get_current_user
 from server.config import PORT
 from server.database import execute, execute_one, execute_insert, execute_update
 
@@ -36,7 +35,6 @@ async def list_apis(
     project_id: int = Query(1),
     keyword: str = Query(""),
     method: str = Query(""),
-    user=Depends(get_current_user),  # noqa: B008
 ):
     sql = "SELECT * FROM interfaces WHERE project_id=%s"
     params = [project_id]
@@ -53,7 +51,7 @@ async def list_apis(
 
 # --------------- Detail ---------------
 @router.get("/{api_id}")
-async def get_api(api_id: int, user=Depends(get_current_user)):  # noqa: B008
+async def get_api(api_id: int):
     row = await execute_one("SELECT * FROM interfaces WHERE id=%s", (api_id,))
     if not row:
         raise HTTPException(404, "API not found")
@@ -62,7 +60,7 @@ async def get_api(api_id: int, user=Depends(get_current_user)):  # noqa: B008
 
 # --------------- Create ---------------
 @router.post("")
-async def create_api(body: ApiBody, user=Depends(get_current_user)):  # noqa: B008
+async def create_api(body: ApiBody):
     api_id = await execute_insert(
         "INSERT INTO interfaces (project_id,name,description,method,path,body_type,status) VALUES (%s,%s,%s,%s,%s,%s,'published')",
         (body.project_id, body.name, body.description, body.method.upper(), body.path, body.body_type),
@@ -73,7 +71,7 @@ async def create_api(body: ApiBody, user=Depends(get_current_user)):  # noqa: B0
 
 # --------------- Update ---------------
 @router.put("/{api_id}")
-async def update_api(api_id: int, body: ApiBody, user=Depends(get_current_user)):  # noqa: B008
+async def update_api(api_id: int, body: ApiBody):
     await execute_update(
         "UPDATE interfaces SET name=%s,description=%s,method=%s,path=%s,body_type=%s WHERE id=%s",
         (body.name, body.description, body.method.upper(), body.path, body.body_type, api_id),
@@ -84,14 +82,14 @@ async def update_api(api_id: int, body: ApiBody, user=Depends(get_current_user))
 
 # --------------- Delete ---------------
 @router.delete("/{api_id}")
-async def delete_api(api_id: int, user=Depends(get_current_user)):  # noqa: B008
+async def delete_api(api_id: int):
     await execute_update("DELETE FROM interfaces WHERE id=%s", (api_id,))
     return {"code": 0, "message": "deleted"}
 
 
 # --------------- Execute ---------------
 @router.post("/{api_id}/execute")
-async def execute_api(api_id: int, body: ExecuteBody, user=Depends(get_current_user)):  # noqa: B008
+async def execute_api(api_id: int, body: ExecuteBody):
     api = await execute_one("SELECT * FROM interfaces WHERE id=%s", (api_id,))
     if not api:
         raise HTTPException(404, "API not found")
@@ -104,7 +102,7 @@ async def execute_api(api_id: int, body: ExecuteBody, user=Depends(get_current_u
     body_type = (api.get("body_type") or "none").lower()
 
     req_kwargs = {
-        "headers": body.headers,
+        "headers": dict(body.headers or {}),
         "timeout": aiohttp.ClientTimeout(total=300),
     }
     if method in ("GET", "DELETE"):
@@ -125,7 +123,6 @@ async def execute_api(api_id: int, body: ExecuteBody, user=Depends(get_current_u
 
     duration = int((time.time() - start) * 1000)
 
-    # Save log
     log_id = await execute_insert(
         "INSERT INTO api_logs (api_id, request_params, response_body, status_code, duration_ms, triggered_by) "
         "VALUES (%s,%s,%s,%s,%s,'manual')",
@@ -145,7 +142,7 @@ async def execute_api(api_id: int, body: ExecuteBody, user=Depends(get_current_u
 
 # --------------- Logs ---------------
 @router.get("/{api_id}/logs")
-async def api_logs(api_id: int, user=Depends(get_current_user)):  # noqa: B008
+async def api_logs(api_id: int):
     rows = await execute(
         "SELECT * FROM api_logs WHERE api_id=%s ORDER BY created_at DESC LIMIT 50",
         (api_id,),
