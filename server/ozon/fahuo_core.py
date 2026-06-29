@@ -1715,11 +1715,20 @@ def prepare_merged_shipment(group, headers, proxies):
                 cluster_name, headers, proxies
             )
         except ValueError as e:
-            print(f"❌ {e}")
-            return None, None, None, 0
+            raise ValueError(f"集群 {cluster_name!r}: {e}") from e
 
     if not shipment_items or not cluster_final_items:
-        return None, None, None, 0
+        skipped = [
+            item["sku"]
+            for item in items
+            if item["sku"] not in offer_to_sku_map
+        ]
+        hint = (
+            f"以下货号未在 Ozon 查到 SKU: {', '.join(skipped)}"
+            if skipped
+            else "货号 SKU 映射后无有效发货行"
+        )
+        raise ValueError(f"无有效 ITEMS（{hint}）")
 
     shipment_items = sort_shipment_items_by_row_id(shipment_items)
     total_boxes = sum(
@@ -2155,8 +2164,9 @@ def submit_cargoes_in_batches(
         )
         operation_id = cargoes_res.get("operation_id")
         if not operation_id:
-            print(f"❌ 未获得 operation_id: {cargoes_res}")
-            return False, all_ordered_ids
+            err = f"货位创建未返回 operation_id: {_api_err_snippet(cargoes_res)}"
+            print(f"❌ {err}")
+            return False, all_ordered_ids, err
 
         ok, ordered_ids, reasons = poll_cargoes_create_status(
             operation_id, supply_id, headers, proxies, len(chunk)
@@ -2171,7 +2181,9 @@ def submit_cargoes_in_batches(
                     shop=shop,
                     batch_no=batch_no,
                 )
-            return False, all_ordered_ids
+            reason_text = ", ".join(reasons) if reasons else "未知原因"
+            err = f"货位提交失败({reason_text})"
+            return False, all_ordered_ids, err
         if not ordered_ids:
             ordered_ids = fetch_new_box_cargo_ids(
                 supply_id, all_ordered_ids, len(chunk), headers, proxies
@@ -2185,7 +2197,7 @@ def submit_cargoes_in_batches(
         if batch_idx < batch_count - 1:
             time.sleep(1.5)
 
-    return True, all_ordered_ids
+    return True, all_ordered_ids, ""
 
 
 def build_cargoes_from_items(shipment_items):
@@ -2821,14 +2833,17 @@ def create_direct_draft_and_poll_warehouse(
         print(
             f"❌ 直发仅支持单集群（莫斯科），当前有 {len(names)} 个: {names}"
         )
-        return None, None, ""
+        return None, None, "", (
+            f"直发仅支持单集群（莫斯科），当前有 {len(names)} 个: {names}"
+        )
 
     cluster_name = next(iter(cluster_final_items))
     final_items = cluster_final_items[cluster_name]
     mc_id = cluster_id_map.get(cluster_name)
     if mc_id is None:
-        print(f"❌ 集群 {cluster_name!r} 未解析到 macrolocal_cluster_id")
-        return None, None, ""
+        err = f"集群 {cluster_name!r} 未解析到 macrolocal_cluster_id"
+        print(f"❌ {err}")
+        return None, None, "", err
 
     print("\n📦 [STEP 2] 创建【直发 DIRECT】草稿 (v1/draft/direct/create)...")
     draft_res = ozon_post(
@@ -2845,8 +2860,9 @@ def create_direct_draft_and_poll_warehouse(
     )
     draft_id = draft_res.get("draft_id")
     if not draft_id:
-        print(f"❌ 直发草稿创建失败: {draft_res}")
-        return None, None, ""
+        err = f"直发草稿创建失败: {_api_err_snippet(draft_res)}"
+        print(f"❌ {err}")
+        return None, None, "", err
     print(f"✅ 直发草稿 draft_id={draft_id}")
 
     print("\n⏳ [STEP 3] 直发算仓...")
@@ -2872,19 +2888,22 @@ def create_direct_draft_and_poll_warehouse(
                         f"🌟 集群 {cluster_name}: {wh_label} "
                         f"(ID={wh_id}, {state})"
                     )
-                    return int(draft_id), [entry], wh_label
+                    return int(draft_id), [entry], wh_label, ""
             if blocks:
                 log_cluster_warehouse_diagnostics(blocks[0], cluster_name)
-            print(f"❌ 集群 {cluster_name} 无可用仓库")
-            return None, None, ""
+            err = f"集群 {cluster_name} 无可用 FBO 仓库（算仓 SUCCESS 但无可用仓）"
+            print(f"❌ {err}")
+            return None, None, "", err
         if current_status == "FAILED":
-            print(f"❌ 直发算仓失败: {info_res.get('errors')}")
-            return None, None, ""
+            err = f"直发算仓失败: {_api_err_snippet(info_res.get('errors') or info_res)}"
+            print(f"❌ {err}")
+            return None, None, "", err
         if current_status in ("IN_PROGRESS", "UNSPECIFIED"):
             time.sleep(3)
             continue
-        print(f"❌ 未知算仓状态: {current_status}")
-        return None, None, ""
+        err = f"直发算仓未知状态 {current_status!r}: {_api_err_snippet(info_res)}"
+        print(f"❌ {err}")
+        return None, None, "", err
 
 
 def build_cluster_crossdock_delivery_attempts(
@@ -3021,9 +3040,13 @@ def create_multi_cluster_crossdock_draft(
             print(
                 f"✅ 多集群草稿算仓通过（草稿 delivery_info 交接仓: {wh['name']}）"
             )
-            return draft_id, selected, wh["name"]
+            return draft_id, selected, wh["name"], ""
         print(f"⚠️ 交接仓 {wh['name']} 算仓未通过，尝试下一方案...")
-    return None, None, ""
+    err = (
+        f"多集群中转草稿失败：已尝试 {len(delivery_attempts)} 个交接仓方案，"
+        "算仓均未通过"
+    )
+    return None, None, "", err
 
 
 def build_global_ordered_cargo_ids(shipment_items, cargo_ids_by_cluster):
@@ -3422,9 +3445,9 @@ def submit_cargoes_for_supply(
         supply_id, box_count, headers, proxies
     )
     if box_count > MAX_BOXES_PER_SUPPLY_ORDER and not transport_cargo_id:
-        return False, []
+        return False, [], "运输货位初始化失败（大货量需 activate transport）"
 
-    cargoes_ok, ordered_cargo_ids = submit_cargoes_in_batches(
+    cargoes_ok, ordered_cargo_ids, cargo_err = submit_cargoes_in_batches(
         supply_id,
         cargoes_list,
         headers,
@@ -3435,7 +3458,7 @@ def submit_cargoes_for_supply(
         full_total=box_count,
     )
     if not cargoes_ok:
-        return False, []
+        return False, [], cargo_err or "货位分批提交失败"
 
     if len(ordered_cargo_ids) != len(cargoes_list):
         ordered_cargo_ids = fetch_ordered_box_cargo_ids(
@@ -3449,9 +3472,9 @@ def submit_cargoes_for_supply(
         if not bind_boxes_to_transport_cargo(
             supply_id, transport_cargo_id, box_cargo_ids, headers, proxies
         ):
-            return False, []
+            return False, [], "盒子货位绑定运输货位失败"
 
-    return True, ordered_cargo_ids
+    return True, ordered_cargo_ids, ""
 
 
 # ==================== 主业务流水线 ====================
@@ -3792,7 +3815,7 @@ def run_single_application(
     # [STEP 7] 提交一箱一 SKU 箱位舱单
     # ===================================================
     print("\n📦 [STEP 7] 正在提交货件信息（грузоместа）...")
-    cargoes_ok, ordered_cargo_ids = submit_cargoes_in_batches(
+    cargoes_ok, ordered_cargo_ids, _ = submit_cargoes_in_batches(
         real_supply_id,
         cargoes_list,
         headers,
@@ -3874,6 +3897,18 @@ def run_single_application(
     return real_order_id
 
 
+def _api_err_snippet(data, max_len=400):
+    if data is None:
+        return ""
+    try:
+        text = json.dumps(data, ensure_ascii=False)
+    except TypeError:
+        text = str(data)
+    if len(text) > max_len:
+        return text[: max_len - 3] + "..."
+    return text
+
+
 def run_merged_application(
     group,
     drop_off_warehouse_name=DEFAULT_CROSSDOCK_DROP_OFF_NAME,
@@ -3884,6 +3919,7 @@ def run_merged_application(
 ):
     """
     多集群合并单：按发货方式各创 1 个 order_id（直发仅莫斯科；中转多集群）。
+    返回 (export_bundle, error_reason)。
     """
     target_shop = group["shop"]
     shipping_method = group["shipping_method"]
@@ -3895,10 +3931,12 @@ def run_merged_application(
     shipper = group.get("shipper", "")
     archive_date = group.get("ship_date")
     clusters = group.get("clusters") or []
+    prefix = f"{shipping_method}单 {shipper}"
 
     if target_shop not in SHOP_DATA:
-        print(f"❌ 未找到店铺【{target_shop}】配置")
-        return None
+        err = f"未找到店铺【{target_shop}】的 Ozon API 配置"
+        print(f"❌ {err}")
+        return None, err
 
     headers, proxies = build_shop_session(target_shop)
     client_id = SHOP_DATA[target_shop]["client_id"]
@@ -3912,12 +3950,14 @@ def run_merged_application(
     print("=" * 60)
 
     print("\n🔍 [STEP 1] 解析 ITEMS 并按集群汇总...")
-    shipment_items, cluster_final_items, cluster_id_map, total_boxes = (
-        prepare_merged_shipment(group, headers, proxies)
-    )
-    if not shipment_items:
-        print("❌ 无有效 ITEMS，终止。")
-        return None
+    try:
+        shipment_items, cluster_final_items, cluster_id_map, total_boxes = (
+            prepare_merged_shipment(group, headers, proxies)
+        )
+    except ValueError as e:
+        err = str(e)
+        print(f"❌ {err}")
+        return None, err
 
     print(
         f"✅ 预计总箱数: {total_boxes}。"
@@ -3932,9 +3972,10 @@ def run_merged_application(
     draft_id = None
     selected_cluster_warehouses = None
     final_dropoff_wh_name = ""
+    draft_error = ""
 
     if shipping_method == "直发":
-        draft_id, selected_cluster_warehouses, _ = (
+        draft_id, selected_cluster_warehouses, _, draft_error = (
             create_direct_draft_and_poll_warehouse(
                 cluster_final_items,
                 cluster_id_map,
@@ -3944,7 +3985,7 @@ def run_merged_application(
         )
     elif shipping_method == "中转":
         print("\n📦 [STEP 2+3] 创建【多集群中转】草稿...")
-        draft_id, selected_cluster_warehouses, final_dropoff_wh_name = (
+        draft_id, selected_cluster_warehouses, final_dropoff_wh_name, draft_error = (
             create_multi_cluster_crossdock_draft(
                 cluster_infos,
                 cluster_id_map,
@@ -3958,12 +3999,14 @@ def run_merged_application(
             )
         )
     else:
-        print(f"❌ 未知发货方式: {shipping_method}")
-        return None
+        err = f"未知发货方式: {shipping_method}"
+        print(f"❌ {err}")
+        return None, err
 
     if not draft_id or not selected_cluster_warehouses:
-        print("❌ 草稿/算仓失败，终止。")
-        return None
+        err = draft_error or f"{prefix} 草稿/算仓失败"
+        print(f"❌ {err}")
+        return None, err
 
     time.sleep(2)
 
@@ -4016,8 +4059,9 @@ def run_merged_application(
             "FAILED",
             "DRAFTSUPPLYCREATESTATUSFAILED",
         ):
-            print(f"❌ 方案确认失败: {status_res}")
-            return None
+            err = f"{prefix} 方案确认失败: {_api_err_snippet(status_res)}"
+            print(f"❌ {err}")
+            return None, err
         time.sleep(3)
 
     print(f"✅ 合并供货单 order_id: {real_order_id}")
@@ -4041,8 +4085,9 @@ def run_merged_application(
         expected_count=len(cluster_final_items),
     )
     if not supplies:
-        print("❌ 未能获取 supply 列表")
-        return None
+        err = f"{prefix} 未能获取 supply 列表（order_id={real_order_id}）"
+        print(f"❌ {err}")
+        return None, err
 
     supply_by_cluster = resolve_supply_by_cluster(
         supplies,
@@ -4055,8 +4100,9 @@ def run_merged_application(
         supply_by_cluster.keys()
     )
     if missing_clusters:
-        print(f"❌ order 中缺少集群 supply: {missing_clusters}")
-        return None
+        err = f"{prefix} order 中缺少集群 supply: {sorted(missing_clusters)}"
+        print(f"❌ {err}")
+        return None, err
 
     for name, sup in sorted(supply_by_cluster.items()):
         print(
@@ -4072,8 +4118,9 @@ def run_merged_application(
     for cluster_name in sorted(items_by_cluster.keys()):
         sup = supply_by_cluster.get(cluster_name)
         if not sup:
-            print(f"❌ 集群 {cluster_name} 无 supply_id")
-            return None
+            err = f"{prefix} 集群 {cluster_name} 无 supply_id"
+            print(f"❌ {err}")
+            return None, err
         supply_id = sup["supply_id"]
         cluster_items = items_by_cluster[cluster_name]
         cluster_boxes = sum(
@@ -4085,7 +4132,7 @@ def run_merged_application(
             f"\n📦 [STEP 7] 集群 {cluster_name} "
             f"(supply_id={supply_id}, {cluster_boxes} 箱)..."
         )
-        ok, ordered_ids = submit_cargoes_for_supply(
+        ok, ordered_ids, cargo_err = submit_cargoes_for_supply(
             supply_id,
             cluster_items,
             headers,
@@ -4095,8 +4142,9 @@ def run_merged_application(
             shop=target_shop,
         )
         if not ok:
-            print(f"❌ 集群 {cluster_name} 货位提交失败")
-            return None
+            err = cargo_err or f"{prefix} 集群 {cluster_name} 货位提交失败"
+            print(f"❌ {err}")
+            return None, err
         cargo_ids_by_cluster[cluster_name] = ordered_ids
         time.sleep(1.5)
 
@@ -4113,8 +4161,9 @@ def run_merged_application(
             unified_supply=False,
         )
     except Exception as e:
-        print(f"❌ 箱唛/Excel 导出失败: {e}")
-        return None
+        err = f"{prefix} 箱唛/Excel 导出失败: {e}"
+        print(f"❌ {err}")
+        return None, err
 
     print(f"\n{'=' * 50}")
     print("🎉 发货单执行完成")
@@ -4129,7 +4178,7 @@ def run_merged_application(
     if box_label_path:
         print(f"   本单箱唛: {box_label_path}")
     print(f"{'=' * 50}")
-    return {
+    bundle = {
         "order_id": real_order_id,
         "shipping_method": shipping_method,
         "shop": target_shop,
@@ -4143,25 +4192,31 @@ def run_merged_application(
         "internal_order_no": internal_order_no,
         "rows": group.get("rows") or [],
     }
+    return bundle, None
 
 
 def run_group_application(
     group,
     drop_off_warehouse_name=DEFAULT_CROSSDOCK_DROP_OFF_NAME,
 ):
-    """按数据库分组执行发货；直发/中转各创一单，返回导出数据供总表合并。"""
+    """按数据库分组执行发货；直发/中转各创一单。返回 (export_bundle, error_reason)。"""
+    shipping_method = group.get("shipping_method", "")
+    shipper = group.get("shipper", "")
+    prefix = f"{shipping_method}单 {shipper}"
     try:
         total_boxes = count_boxes_in_items(group["items"])
     except ValueError as e:
-        print(f"❌ ITEMS 校验失败: {e}")
-        return None
+        err = f"{prefix} ITEMS 校验失败: {e}"
+        print(f"❌ {err}")
+        return None, err
 
-    export_bundle = run_merged_application(
+    export_bundle, apply_error = run_merged_application(
         group,
         drop_off_warehouse_name=drop_off_warehouse_name,
     )
     if not export_bundle:
-        return None
+        err = apply_error or f"{prefix} 申请失败"
+        return None, err
 
     order_id = export_bundle["order_id"]
     try:
@@ -4180,7 +4235,7 @@ def run_group_application(
             f"\n✅ 本单共 {total_boxes} 箱，"
             f"order_id={order_id}（各 supply 独立运输货位）"
         )
-    return export_bundle
+    return export_bundle, None
 
 
 def run_resume_cargoes_only(
@@ -4246,7 +4301,7 @@ def run_resume_cargoes_only(
             print("❌ 运输货位初始化失败。")
             return None
         print(f"📦 待补提交 {len(remaining)} 箱")
-        cargoes_ok, _ = submit_cargoes_in_batches(
+        cargoes_ok, _, _ = submit_cargoes_in_batches(
             supply_id,
             remaining,
             headers,
@@ -4430,7 +4485,7 @@ def run_resume_merged_cargoes(
             if cluster_boxes > MAX_BOXES_PER_SUPPLY_ORDER and not transport_cargo_id:
                 print(f"❌ 集群 {cluster_name} 运输货位初始化失败")
                 return None
-            ok, _ = submit_cargoes_in_batches(
+            ok, _, _ = submit_cargoes_in_batches(
                 supply_id,
                 remaining,
                 headers,
@@ -4565,7 +4620,7 @@ def main():
             print(f"{'-' * 60}")
 
             try:
-                export_bundle = run_group_application(
+                export_bundle, apply_error = run_group_application(
                     group,
                     drop_off_warehouse_name=drop_off_warehouse_name,
                 )
@@ -4575,7 +4630,7 @@ def main():
 
             if not export_bundle:
                 print(
-                    f"❌ {group['shipping_method']}单 {shipper} 申请失败，"
+                    f"❌ {apply_error or group['shipping_method'] + '单 ' + shipper + ' 申请失败'}，"
                     f"继续同包下一单。"
                 )
                 continue

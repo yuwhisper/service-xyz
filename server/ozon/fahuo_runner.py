@@ -55,6 +55,20 @@ def _upload_order_dir_to_dingpan(
     )
 
 
+def _summarize_failure_reason(failed: list[dict], fallback: str | None) -> str | None:
+    reasons = list(
+        dict.fromkeys(item["reason"] for item in failed if item.get("reason"))
+    )
+    if not reasons:
+        return fallback
+    if len(reasons) == 1:
+        return reasons[0]
+    preview = " | ".join(reasons[:3])
+    if len(reasons) > 3:
+        preview += f" 等{len(reasons)}类错误"
+    return f"共 {len(failed)} 条失败: {preview}"
+
+
 def _finalize_result(
     success: list[str],
     failed: list[dict],
@@ -76,7 +90,9 @@ def _finalize_result(
     elif failed:
         run_status = "failed"
         if reason is None:
-            reason = f"共 {len(failed)} 条处理失败"
+            reason = _summarize_failure_reason(
+                failed, f"共 {len(failed)} 条处理失败"
+            )
     else:
         run_status = "success"
 
@@ -145,7 +161,7 @@ def _run_full(params: dict[str, Any]) -> dict[str, Any]:
             task_idx += 1
             group_rows = group.get("rows") or []
             try:
-                export_bundle = core.run_group_application(
+                export_bundle, apply_error = core.run_group_application(
                     group,
                     drop_off_warehouse_name=drop_off,
                 )
@@ -157,7 +173,8 @@ def _run_full(params: dict[str, Any]) -> dict[str, Any]:
                 _fail_rows(
                     failed,
                     group_rows,
-                    f"{group['shipping_method']}单 {shipper} 申请失败",
+                    apply_error
+                    or f"{group['shipping_method']}单 {shipper} 申请失败",
                 )
                 continue
 
