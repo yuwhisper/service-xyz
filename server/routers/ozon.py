@@ -24,7 +24,7 @@ _RESULT_KEYS = (
     "reason",
     "success",
     "failed",
-    "dingpan_uploads",
+    "file_ids",
 )
 
 

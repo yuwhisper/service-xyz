@@ -105,7 +105,7 @@ def _run_full(params: dict[str, Any]) -> dict[str, Any]:
 
     success: list[str] = []
     failed: list[dict] = []
-    dingpan_uploads: list[dict] = []
+    file_ids: list[str] = []
 
     try:
         groups = core.fetch_pending_shipment_groups(ship_date=ship_date)
@@ -190,12 +190,9 @@ def _run_full(params: dict[str, Any]) -> dict[str, Any]:
         if upload_dingpan:
             try:
                 upload_result = _upload_order_dir_to_dingpan(order_dir, params)
-                dingpan_uploads.append(
-                    {
-                        "order_dir": order_dir,
-                        **upload_result,
-                    }
-                )
+                file_id = upload_result.get("fileId")
+                if file_id is not None and file_id != "":
+                    file_ids.append(str(file_id))
             except Exception as e:
                 _fail_rows(
                     failed,
@@ -203,8 +200,9 @@ def _run_full(params: dict[str, Any]) -> dict[str, Any]:
                     f"钉盘上传失败: {e}",
                 )
 
-    extra = {"dingpan_uploads": dingpan_uploads} if dingpan_uploads else None
-    return _finalize_result(success, failed, executed=True, extra=extra)
+    return _finalize_result(
+        success, failed, executed=True, extra={"file_ids": file_ids}
+    )
 
 
 def _run_resume(params: dict[str, Any]) -> dict[str, Any]:

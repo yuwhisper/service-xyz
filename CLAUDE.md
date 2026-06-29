@@ -161,6 +161,7 @@ MySQL 远程服务器 `121.43.75.44:3306`，库名 `zyx`。
 - 协议头：`Content-Type: application/json`
 - 协议体：`{"wait": true}`
 - 成功唯一ID 列表：响应 JSON 的 `data.success`（字符串数组）
+- 钉盘文件 ID 列表：响应 JSON 的 `data.file_ids`（每个发货包压缩上传钉盘后的 fileId；未上传或失败时为空数组）
 - `run_status`：`success` 全成功 / `partial` 部分成功 / `failed` 全失败 / `skipped` 未执行（如无当天数据）
 - `executed=false` 时看 `reason` 了解未执行原因
 - HTTP 始终 200，`code` 始终 0；部分成功用 `run_status: partial` 区分
