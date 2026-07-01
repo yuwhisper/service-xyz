@@ -10,25 +10,39 @@ from typing import Any
 import requests
 
 from server.jushuitan.config import (
-    ACCESS_TOKEN,
     ACCESS_TOKEN_PATH,
     APP_KEY,
     APP_SECRET,
     AUTH_CODE,
     INIT_TOKEN_PATH,
     OPENAPI_BASE,
-    REFRESH_TOKEN,
     REFRESH_TOKEN_PATH,
     SKU_QUERY_BATCH_SIZE,
     SKU_QUERY_PATH,
 )
+from server.jushuitan.token_store import load_tokens, save_tokens
 
 NO_PROXY = {"http": None, "https": None}
 
 _token_lock = threading.Lock()
 _cached_access_token = ""
-_cached_refresh_token = REFRESH_TOKEN or ""
+_cached_refresh_token = ""
 _token_expires_at = 0.0
+
+
+def _load_from_store() -> None:
+    global _cached_access_token, _cached_refresh_token, _token_expires_at
+    stored = load_tokens()
+    _cached_access_token = (stored.get("access_token") or "").strip()
+    _cached_refresh_token = (stored.get("refresh_token") or "").strip()
+    expires_at = stored.get("expires_at")
+    try:
+        _token_expires_at = float(expires_at) if expires_at else 0.0
+    except (TypeError, ValueError):
+        _token_expires_at = 0.0
+
+
+_load_from_store()
 
 
 def _sign(params: dict[str, Any]) -> str:
@@ -83,6 +97,11 @@ def _apply_token_response(data: dict[str, Any], source: str) -> dict[str, Any]:
             _token_expires_at = time.time() + 3600
     else:
         _token_expires_at = time.time() + 86400 * 30
+    save_tokens(
+        access_token=_cached_access_token,
+        refresh_token=_cached_refresh_token,
+        expires_at=_token_expires_at,
+    )
     return _token_payload(source, expires_in=expires_in)
 
 
@@ -99,9 +118,7 @@ def _token_payload(source: str, expires_in: Any = None) -> dict[str, Any]:
 def _fetch_init_token(code: str | None = None) -> dict[str, Any]:
     auth_code = (code or AUTH_CODE or "").strip()
     if not auth_code:
-        raise ValueError(
-            "聚水潭 access_token 未配置，且缺少授权 code 无法换取令牌"
-        )
+        raise ValueError("缺少聚水潭授权 code，无法换取令牌")
     data = _post_form(
         INIT_TOKEN_PATH,
         {
@@ -128,7 +145,7 @@ def _fetch_access_token_by_code(code: str | None = None) -> dict[str, Any]:
 
 def _refresh_access_token() -> dict[str, Any]:
     if not _cached_refresh_token:
-        raise ValueError("缺少 JUSHUITAN_REFRESH_TOKEN，无法刷新 access_token")
+        raise ValueError("缺少 refresh_token，无法刷新 access_token")
     data = _post_form(
         REFRESH_TOKEN_PATH,
         {
@@ -141,19 +158,21 @@ def _refresh_access_token() -> dict[str, Any]:
 
 
 def fetch_token_info(*, force: bool = False, code: str | None = None) -> dict[str, Any]:
-    """获取聚水潭 access_token；force=True 时忽略缓存重新换取。"""
+    """获取聚水潭 access_token；force=True 时忽略内存缓存重新向 API 换取。"""
     global _cached_access_token, _token_expires_at
     with _token_lock:
         if force:
             _cached_access_token = ""
             _token_expires_at = 0.0
 
-        if ACCESS_TOKEN and not _cached_access_token and not force:
-            _cached_access_token = ACCESS_TOKEN
-            _token_expires_at = time.time() + 86400 * 365
-            return _token_payload("env")
+        if not _cached_access_token or not _cached_refresh_token or force:
+            _load_from_store()
 
-        if _cached_access_token and time.time() < _token_expires_at and not force:
+        if (
+            not force
+            and _cached_access_token
+            and time.time() < _token_expires_at
+        ):
             return _token_payload("cached")
 
         errors: list[str] = []
@@ -171,11 +190,6 @@ def fetch_token_info(*, force: bool = False, code: str | None = None) -> dict[st
                 return fetcher()
             except Exception as e:
                 errors.append(str(e))
-
-        if ACCESS_TOKEN:
-            _cached_access_token = ACCESS_TOKEN
-            _token_expires_at = time.time() + 86400 * 365
-            return _token_payload("env")
 
         raise RuntimeError("获取聚水潭 access_token 失败: " + " | ".join(errors))
 

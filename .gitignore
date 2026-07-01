@@ -20,6 +20,7 @@ log/
 *.log
 init.lock
 ozon-fahuo-data/
+.jst_tokens.json
 
 # IDE
 .idea/
