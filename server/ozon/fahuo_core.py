@@ -2926,7 +2926,7 @@ def build_cluster_crossdock_delivery_attempts(
                 f"(ID={try_order[0]['warehouse_id']})"
             )
             add_attempt(cluster_name, try_order[0])
-            for alt in try_order[1:4]:
+            for alt in try_order[1:16]:
                 add_attempt(cluster_name, alt)
 
     if not attempts:
