@@ -175,6 +175,14 @@ def build_order_output_dir(shipper, shop, batch_or_order, archive_date=None):
     return os.path.join(SHIPMENT_ARCHIVE_ROOT, folder_name)
 
 
+def build_excel_report_filenames(batch_or_order, total_boxes):
+    """询价表/顺序表文件名：单号与文件夹一致，询价表含慢线与总箱数。"""
+    tag = sanitize_folder_name(batch_or_order or "未知单号")
+    inquiry = f"{tag}慢线{int(total_boxes)}.xlsx"
+    order_sheet = f"{tag}箱唛顺序表.xlsx"
+    return inquiry, order_sheet
+
+
 def item_meta_kwargs(item):
     meta = {key: item.get(key) for key in ITEM_META_KEYS}
     if item.get("row_id") is not None:
@@ -1237,13 +1245,20 @@ def export_inquiry_sheet_xlsx(
 
 
 def export_batch_excel_reports(
-    order_dir, box_meta, internal_order_no, db_config=None
+    order_dir,
+    box_meta,
+    internal_order_no,
+    db_config=None,
+    batch_or_order=None,
 ):
     if not box_meta:
         print("⚠️ 无箱位明细，跳过 Excel 导出")
         return None, None
 
-    print("\n📊 正在生成询价表与顺序表 Excel...")
+    tag_key = (batch_or_order or "").strip() or (internal_order_no or "").strip() or "未知单号"
+    inquiry_name, order_name = build_excel_report_filenames(tag_key, len(box_meta))
+
+    print(f"\n📊 正在生成 Excel: {inquiry_name}、{order_name}...")
     product_details = fetch_product_details(
         [row.get("sku") for row in box_meta], db_config=db_config
     )
@@ -1265,8 +1280,8 @@ def export_batch_excel_reports(
         print(
             f"📷 商品图片: 成功 {len(image_paths)}/{len(product_details)} 个 SKU"
         )
-    inquiry_path = os.path.join(order_dir, "询价表.xlsx")
-    order_path = os.path.join(order_dir, "顺序表.xlsx")
+    inquiry_path = os.path.join(order_dir, inquiry_name)
+    order_path = os.path.join(order_dir, order_name)
     export_inquiry_sheet_xlsx(
         inquiry_path,
         box_meta,
@@ -3191,6 +3206,7 @@ def export_merged_labels_and_excel(
     internal_order_no,
     write_excel=True,
     unified_supply=False,
+    batch_or_order=None,
 ):
     """
     多集群：各 supply 箱唛 → 按唯一ID全局顺序合并为 1 本 PDF；
@@ -3261,11 +3277,18 @@ def export_merged_labels_and_excel(
         full_box_meta = enrich_box_meta_with_cargo_ids(
             box_meta, global_ordered_cargo_ids
         )
-        export_batch_excel_reports(order_dir, full_box_meta, internal_order_no)
+        export_batch_excel_reports(
+            order_dir,
+            full_box_meta,
+            internal_order_no,
+            batch_or_order=batch_or_order,
+        )
     return ordered_path, global_ordered_cargo_ids, pdf_bytes_list
 
 
-def finalize_combined_exports(order_dir, export_bundles, internal_order_no):
+def finalize_combined_exports(
+    order_dir, export_bundles, internal_order_no, batch_or_order=None
+):
     """
     同一发货人+店铺下，合并直发/中转的总箱唛、询价表、顺序表（按唯一ID全局顺序）。
     """
@@ -3308,7 +3331,12 @@ def finalize_combined_exports(order_dir, export_bundles, internal_order_no):
     full_box_meta = enrich_box_meta_with_cargo_ids(
         box_meta, global_ordered_cargo_ids
     )
-    export_batch_excel_reports(order_dir, full_box_meta, internal_order_no)
+    export_batch_excel_reports(
+        order_dir,
+        full_box_meta,
+        internal_order_no,
+        batch_or_order=batch_or_order,
+    )
     return ordered_path, global_ordered_cargo_ids, full_box_meta
 
 
@@ -3847,10 +3875,17 @@ def run_single_application(
     )
     try:
         export_batch_excel_reports(
-            order_dir, full_box_meta, internal_order_no
+            order_dir,
+            full_box_meta,
+            internal_order_no,
+            batch_or_order=batch_or_order,
         )
     except Exception as exc:
         print(f"⚠️ Excel 导出失败: {exc}")
+
+    inquiry_name, order_name = build_excel_report_filenames(
+        batch_or_order, len(full_box_meta)
+    )
 
     # ===================================================
     # 🎉 数据终端看板
@@ -3868,8 +3903,8 @@ def run_single_application(
     print(f"📁 输出目录: {order_dir}")
     print(f"   ├─ 原始箱唛 PDF（Ozon 下载）")
     print(f"   ├─ 交货货位标签_按ITEMS顺序.pdf（重排后，贴标用）")
-    print(f"   ├─ 询价表.xlsx")
-    print(f"   └─ 顺序表.xlsx")
+    print(f"   ├─ {inquiry_name}")
+    print(f"   └─ {order_name}")
     if box_label_path:
         print(f"   推荐打印: {box_label_path}")
     print(f"==================================================")
@@ -4337,7 +4372,10 @@ def run_resume_cargoes_only(
     )
     try:
         export_batch_excel_reports(
-            order_dir, full_box_meta, internal_order_no
+            order_dir,
+            full_box_meta,
+            internal_order_no,
+            batch_or_order=batch_or_order,
         )
     except Exception as exc:
         print(f"⚠️ Excel 导出失败: {exc}")
@@ -4523,6 +4561,7 @@ def run_resume_merged_cargoes(
             internal_order_no,
             write_excel=True,
             unified_supply=False,
+            batch_or_order=batch_or_order,
         )
     except Exception as e:
         print(f"❌ 箱唛/Excel 导出失败: {e}")
@@ -4632,7 +4671,10 @@ def main():
         internal_order_no = combine_internal_order_nos(all_rows)
         try:
             finalize_combined_exports(
-                order_dir, export_bundles, internal_order_no
+                order_dir,
+                export_bundles,
+                internal_order_no,
+                batch_or_order=batch_or_order,
             )
             success_bundles += 1
             print(
