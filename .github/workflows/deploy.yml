@@ -10,7 +10,36 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Deploy via SSH
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 服务器访问 github.com:443 经常超时，改为 Actions 打包后 SCP 上传
+      - name: Pack release
+        run: |
+          tar czf service-zyx-release.tgz \
+            --exclude='.git' \
+            --exclude='.env' \
+            --exclude='ozon-fahuo-data' \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='.mcp.json' \
+            --exclude='docs' \
+            --exclude='scripts/_fetch_logs_tmp.py' \
+            --exclude='scripts/_*.py' \
+            .
+
+      - name: Upload release tarball
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: 22
+          source: "service-zyx-release.tgz"
+          target: "/tmp/"
+          overwrite: true
+
+      - name: Extract, install, restart
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -21,7 +50,20 @@ jobs:
           script_stop: true
           script: |
             set -euo pipefail
-            bash /opt/service-zyx/deploy/deploy.sh
-            echo "[actions] verify HEAD"
-            git -C /opt/service-zyx rev-parse --short HEAD
+            APP=/opt/service-zyx
+            test -f /tmp/service-zyx-release.tgz
+            mkdir -p "$APP"
+            # 保留运行时文件，解压覆盖代码
+            tar xzf /tmp/service-zyx-release.tgz -C "$APP"
+            chmod +x "$APP/deploy/deploy.sh" || true
+            cd "$APP"
+            echo "[deploy] install dependencies..."
+            pip3 install -r requirements.txt -q
+            echo "[deploy] database setup..."
+            python3 scripts/setup.py
+            echo "[deploy] restart service..."
+            systemctl restart service-zyx
             systemctl is-active service-zyx
+            systemctl status service-zyx --no-pager | head -15
+            rm -f /tmp/service-zyx-release.tgz
+            echo "[deploy] done (sha=${{ github.sha }})"
