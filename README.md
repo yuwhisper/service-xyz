@@ -24,7 +24,7 @@ bash /opt/service-zyx/deploy/deploy.sh
 
 **说明：** 服务器可能无法直接访问 GitHub。若 `git pull` 失败，请在本地 push 后通过 SFTP 上传，或在服务器配置 Git 代理/镜像。
 
-可选 GitHub Actions 自动部署：在仓库 Secrets 中配置 `SSH_HOST`、`SSH_USER`、`SSH_KEY`，推送到 `main` 后会触发 [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)。
+可选 GitHub Actions 自动部署：在仓库 Secrets 中配置 `SSH_HOST`、`SSH_USER`、`SSH_KEY`（私钥），并确保服务器 `/root/.ssh/authorized_keys` 已写入对应公钥。推送到 `main`（或手动 Run workflow）后会触发 [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)，在服务器执行 `deploy/deploy.sh`（`git fetch` + `reset --hard origin/main` 后重启服务）。
 
 ## 访问入口
 
