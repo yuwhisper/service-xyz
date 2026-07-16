@@ -1809,6 +1809,31 @@ def build_cargo_failure_meta(failed_cluster, failed_items, ok_items_by_cluster):
     }
 
 
+def build_draft_failure_meta(shipment_items, error_msg):
+    """
+    草稿/算仓阶段失败：尽量只标记问题集群行，避免整组重复同一原因。
+    """
+    failed_cluster = None
+    match = re.search(r"集群\s+(.+?)\s+(?:不能|无)", error_msg or "")
+    if match:
+        failed_cluster = match.group(1).strip()
+
+    if failed_cluster:
+        failed_items = [
+            row
+            for row in shipment_items or []
+            if (row.get("cluster") or "").strip() == failed_cluster
+        ]
+    else:
+        failed_items = list(shipment_items or [])
+
+    if not failed_items:
+        failed_items = list(shipment_items or [])
+    return build_cargo_failure_meta(
+        failed_cluster or "未知集群", failed_items, {}
+    )
+
+
 def print_warehouse_limits_exceed_hint(
     supply_id, order_id, submitted_count, total_count, shop=None, batch_no=None
 ):
@@ -2636,8 +2661,26 @@ def is_sku_matrix_unavailable(cluster_block):
     return False
 
 
-def summarize_cluster_storage_rejection(cluster_block, cluster_label, skus=None):
-    """把算仓 SUCCESS 但无可用仓，拼成可读原因（含矩阵拒绝）。"""
+def _format_shipment_failure_prefix(shipper="", internal_order_no="", draft_id=None):
+    parts = []
+    if shipper:
+        parts.append(f"发货人={shipper}")
+    if internal_order_no:
+        parts.append(f"内部订单号={internal_order_no}")
+    if draft_id:
+        parts.append(f"draft_id={draft_id}")
+    return " ".join(parts)
+
+
+def summarize_cluster_storage_rejection(
+    cluster_block,
+    cluster_label,
+    skus=None,
+    shipper="",
+    internal_order_no="",
+    draft_id=None,
+):
+    """把算仓 SUCCESS 但无可用仓，拼成可读原因（含矩阵拒绝）。skus 应为货号 offer_id。"""
     warehouses = cluster_block.get("warehouses") or []
     sku_hint = ""
     if skus:
@@ -2646,8 +2689,11 @@ def summarize_cluster_storage_rejection(cluster_block, cluster_label, skus=None)
         if len(skus) > 8:
             sku_hint += f"等{len(skus)}个"
 
+    prefix = _format_shipment_failure_prefix(shipper, internal_order_no, draft_id)
+    prefix_sp = f"{prefix} " if prefix else ""
+
     if not warehouses:
-        return f"集群 {cluster_label} 无候选仓{sku_hint}"
+        return f"{prefix_sp}集群 {cluster_label} 无候选仓{sku_hint}".strip()
 
     parts = []
     for wh in warehouses[:5]:
@@ -2659,11 +2705,11 @@ def summarize_cluster_storage_rejection(cluster_block, cluster_label, skus=None)
     detail = "; ".join(parts)
     if is_sku_matrix_unavailable(cluster_block):
         return (
-            f"集群 {cluster_label} 不能接受该SKU"
+            f"{prefix_sp}集群 {cluster_label} 不能接受该SKU"
             f"（NOT_AVAILABLE_MATRIX，不在可发矩阵）{sku_hint}"
             f" [{detail}]"
-        )
-    return f"集群 {cluster_label} 无可用仓{sku_hint} [{detail}]"
+        ).strip()
+    return f"{prefix_sp}集群 {cluster_label} 无可用仓{sku_hint} [{detail}]".strip()
 
 
 def log_cluster_warehouse_diagnostics(cluster_block, cluster_label):
@@ -2798,24 +2844,32 @@ def build_cluster_infos_payload(cluster_final_items, cluster_id_map):
     return build_clusters_info_payload(cluster_final_items, cluster_id_map)
 
 
-def _skus_by_cluster_id_from_clusters_info(clusters_info):
-    """macrolocal_cluster_id -> [sku, ...]"""
+def _offer_ids_by_cluster_id(shipment_items, cluster_id_map):
+    """macrolocal_cluster_id -> [货号 offer_id, ...]（用户传入的 SKU，非 Ozon 数字 sku）。"""
     out = {}
-    for block in clusters_info or []:
-        mc_id = block.get("macrolocal_cluster_id")
+    for row in shipment_items or []:
+        cluster = (row.get("cluster") or "").strip() or "未知集群"
+        mc_id = cluster_id_map.get(cluster)
         if mc_id is None:
             continue
-        skus = []
-        for item in block.get("items") or []:
-            sku = item.get("sku")
-            if sku is not None and sku != "":
-                skus.append(sku)
-        out[int(mc_id)] = skus
+        oid = (row.get("offer_id") or "").strip()
+        if not oid:
+            continue
+        bucket = out.setdefault(int(mc_id), [])
+        if oid not in bucket:
+            bucket.append(oid)
     return out
 
 
 def poll_multi_cluster_warehouses(
-    draft_id, cluster_id_map, headers, proxies, crossdock=False, clusters_info=None
+    draft_id,
+    cluster_id_map,
+    headers,
+    proxies,
+    crossdock=False,
+    shipment_items=None,
+    shipper="",
+    internal_order_no="",
 ):
     """
     轮询 v2/draft/create/info，为每个集群选仓。
@@ -2825,7 +2879,7 @@ def poll_multi_cluster_warehouses(
     name_by_id = {v: k for k, v in cluster_id_map.items()}
     id_to_name = dict(name_by_id)
     expected_ids = set(cluster_id_map.values())
-    sku_by_mc = _skus_by_cluster_id_from_clusters_info(clusters_info)
+    offer_by_mc = _offer_ids_by_cluster_id(shipment_items, cluster_id_map)
 
     while True:
         info_res = ozon_post(
@@ -2853,9 +2907,14 @@ def poll_multi_cluster_warehouses(
             for mc_id in expected_ids:
                 cluster_block = blocks_by_id.get(mc_id)
                 cluster_label = name_by_id.get(mc_id, str(mc_id))
-                skus = sku_by_mc.get(int(mc_id)) or []
+                offer_ids = offer_by_mc.get(int(mc_id)) or []
                 if not cluster_block:
+                    prefix = _format_shipment_failure_prefix(
+                        shipper, internal_order_no, draft_id
+                    )
                     err = f"算仓结果缺少集群: {cluster_label}"
+                    if prefix:
+                        err = f"{prefix} {err}"
                     print(f"❌ {err}")
                     errors = info_res.get("errors") or []
                     if errors:
@@ -2869,7 +2928,12 @@ def poll_multi_cluster_warehouses(
                 if not entry:
                     log_cluster_warehouse_diagnostics(cluster_block, cluster_label)
                     err = summarize_cluster_storage_rejection(
-                        cluster_block, cluster_label, skus=skus
+                        cluster_block,
+                        cluster_label,
+                        skus=offer_ids,
+                        shipper=shipper,
+                        internal_order_no=internal_order_no,
+                        draft_id=draft_id,
                     )
                     print(f"❌ {err}")
                     errors = info_res.get("errors") or []
@@ -2893,22 +2957,41 @@ def poll_multi_cluster_warehouses(
             missing = expected_ids - found_ids
             if missing:
                 missing_names = [name_by_id.get(i, i) for i in missing]
+                prefix = _format_shipment_failure_prefix(
+                    shipper, internal_order_no, draft_id
+                )
                 err = f"算仓结果缺少集群: {missing_names}"
+                if prefix:
+                    err = f"{prefix} {err}"
                 print(f"❌ {err}")
                 return None, err, False
             return selected, "", False
 
         if current_status == "FAILED":
             errors = info_res.get("errors") or info_res
+            prefix = _format_shipment_failure_prefix(
+                shipper, internal_order_no, draft_id
+            )
             err = f"多集群算仓失败: {_api_err_snippet(errors)}"
+            if prefix:
+                err = f"{prefix} {err}"
             print(f"❌ {err}")
-            err_text = json.dumps(errors, ensure_ascii=False) if not isinstance(errors, str) else errors
+            err_text = (
+                json.dumps(errors, ensure_ascii=False)
+                if not isinstance(errors, str)
+                else errors
+            )
             retry = "NOT_AVAILABLE_MATRIX" not in (err_text or "").upper()
             return None, err, retry
         if current_status in ("IN_PROGRESS", "UNSPECIFIED"):
             time.sleep(3)
             continue
+        prefix = _format_shipment_failure_prefix(
+            shipper, internal_order_no, draft_id
+        )
         err = f"未知算仓状态: {current_status}"
+        if prefix:
+            err = f"{prefix} {err}"
         print(f"❌ {err}")
         return None, err, False
 
@@ -3117,6 +3200,9 @@ def create_multi_cluster_crossdock_draft(
     drop_off_retry_delay=6,
     crossdock_delivery_type="DROPOFF",
     seller_warehouse_id=0,
+    shipment_items=None,
+    shipper="",
+    internal_order_no="",
 ):
     """
     中转多集群：优先全部集群共用同一个 delivery_info（统一发运）。
@@ -3167,7 +3253,10 @@ def create_multi_cluster_crossdock_draft(
             clusters_info, headers, proxies, delivery_info=delivery_info
         )
         if not draft_id:
+            prefix = _format_shipment_failure_prefix(shipper, internal_order_no)
             last_detail = f"交接仓 {wh['name']} 创建草稿失败"
+            if prefix:
+                last_detail = f"{prefix} {last_detail}"
             continue
 
         selected, poll_err, retry_dropoff = poll_multi_cluster_warehouses(
@@ -3176,7 +3265,9 @@ def create_multi_cluster_crossdock_draft(
             headers,
             proxies,
             crossdock=True,
-            clusters_info=clusters_info,
+            shipment_items=shipment_items,
+            shipper=shipper,
+            internal_order_no=internal_order_no,
         )
         if selected:
             print(
@@ -3196,10 +3287,13 @@ def create_multi_cluster_crossdock_draft(
             f"末次原因: {last_detail}"
         )
     else:
+        prefix = _format_shipment_failure_prefix(shipper, internal_order_no)
         err = (
             f"多集群中转草稿失败：已尝试 {len(delivery_attempts)} 个交接仓方案，"
             "算仓均未通过"
         )
+        if prefix:
+            err = f"{prefix} {err}"
     return None, None, "", err
 
 
@@ -4171,6 +4265,9 @@ def run_merged_application(
                 drop_off_retry_delay=drop_off_retry_delay,
                 crossdock_delivery_type=crossdock_delivery_type,
                 seller_warehouse_id=seller_warehouse_id,
+                shipment_items=shipment_items,
+                shipper=shipper,
+                internal_order_no=internal_order_no,
             )
         )
     else:
@@ -4181,7 +4278,7 @@ def run_merged_application(
     if not draft_id or not selected_cluster_warehouses:
         err = draft_error or f"{prefix} 草稿/算仓失败"
         print(f"❌ {err}")
-        return None, err, None
+        return None, err, build_draft_failure_meta(shipment_items, err)
 
     time.sleep(2)
 
