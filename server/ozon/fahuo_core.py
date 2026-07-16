@@ -2617,11 +2617,61 @@ def extract_clusters_from_draft_info(info_res):
     return result.get("clusters") or []
 
 
+def _warehouse_invalid_reason(wh):
+    avail = wh.get("availability_status") or {}
+    status = wh.get("status") or {}
+    return (
+        avail.get("invalid_reason")
+        or status.get("invalid_reason")
+        or ""
+    ).strip()
+
+
+def is_sku_matrix_unavailable(cluster_block):
+    """Ozon: NOT_AVAILABLE_MATRIX = 该 SKU 不在集群可发矩阵（换交接仓无效）。"""
+    for wh in cluster_block.get("warehouses") or []:
+        reason = _warehouse_invalid_reason(wh).upper()
+        if "NOT_AVAILABLE_MATRIX" in reason:
+            return True
+    return False
+
+
+def summarize_cluster_storage_rejection(cluster_block, cluster_label, skus=None):
+    """把算仓 SUCCESS 但无可用仓，拼成可读原因（含矩阵拒绝）。"""
+    warehouses = cluster_block.get("warehouses") or []
+    sku_hint = ""
+    if skus:
+        shown = [str(s) for s in skus[:8]]
+        sku_hint = f" SKU={','.join(shown)}"
+        if len(skus) > 8:
+            sku_hint += f"等{len(skus)}个"
+
+    if not warehouses:
+        return f"集群 {cluster_label} 无候选仓{sku_hint}"
+
+    parts = []
+    for wh in warehouses[:5]:
+        state = _warehouse_availability_state(wh) or "-"
+        reason = _warehouse_invalid_reason(wh) or "-"
+        wh_name = _warehouse_storage_name(wh) or "(无名)"
+        parts.append(f"{wh_name} state={state} reason={reason}")
+
+    detail = "; ".join(parts)
+    if is_sku_matrix_unavailable(cluster_block):
+        return (
+            f"集群 {cluster_label} 不能接受该SKU"
+            f"（NOT_AVAILABLE_MATRIX，不在可发矩阵）{sku_hint}"
+            f" [{detail}]"
+        )
+    return f"集群 {cluster_label} 无可用仓{sku_hint} [{detail}]"
+
+
 def log_cluster_warehouse_diagnostics(cluster_block, cluster_label):
     warehouses = cluster_block.get("warehouses") or []
     print(f"⚠️ 集群 {cluster_label} 算仓明细（{len(warehouses)} 个候选仓）:")
     for idx, wh in enumerate(warehouses[:8], start=1):
         state = _warehouse_availability_state(wh)
+        reason = _warehouse_invalid_reason(wh)
         wh_id = _warehouse_storage_id(wh)
         wh_name = _warehouse_storage_name(wh)
         bundle_id = (wh.get("bundle_id") or "").strip()
@@ -2629,7 +2679,8 @@ def log_cluster_warehouse_diagnostics(cluster_block, cluster_label):
         print(
             f"   [{idx}] {wh_name or '(无名)'} id={wh_id} "
             f"bundle={bundle_id or '-'} "
-            f"state={state or '-'} available={is_avail}"
+            f"state={state or '-'} reason={reason or '-'} "
+            f"available={is_avail}"
         )
     if len(warehouses) > 8:
         print(f"   ... 另有 {len(warehouses) - 8} 个仓未列出")
@@ -2747,16 +2798,34 @@ def build_cluster_infos_payload(cluster_final_items, cluster_id_map):
     return build_clusters_info_payload(cluster_final_items, cluster_id_map)
 
 
+def _skus_by_cluster_id_from_clusters_info(clusters_info):
+    """macrolocal_cluster_id -> [sku, ...]"""
+    out = {}
+    for block in clusters_info or []:
+        mc_id = block.get("macrolocal_cluster_id")
+        if mc_id is None:
+            continue
+        skus = []
+        for item in block.get("items") or []:
+            sku = item.get("sku")
+            if sku is not None and sku != "":
+                skus.append(sku)
+        out[int(mc_id)] = skus
+    return out
+
+
 def poll_multi_cluster_warehouses(
-    draft_id, cluster_id_map, headers, proxies, crossdock=False
+    draft_id, cluster_id_map, headers, proxies, crossdock=False, clusters_info=None
 ):
     """
     轮询 v2/draft/create/info，为每个集群选仓。
-    返回 selected_cluster_warehouses 列表。
+    返回 (selected_list_or_None, error_reason, retry_dropoff)。
+    retry_dropoff=False 表示 SKU/矩阵类问题，换交接仓无意义。
     """
     name_by_id = {v: k for k, v in cluster_id_map.items()}
     id_to_name = dict(name_by_id)
     expected_ids = set(cluster_id_map.values())
+    sku_by_mc = _skus_by_cluster_id_from_clusters_info(clusters_info)
 
     while True:
         info_res = ozon_post(
@@ -2784,22 +2853,30 @@ def poll_multi_cluster_warehouses(
             for mc_id in expected_ids:
                 cluster_block = blocks_by_id.get(mc_id)
                 cluster_label = name_by_id.get(mc_id, str(mc_id))
+                skus = sku_by_mc.get(int(mc_id)) or []
                 if not cluster_block:
-                    print(f"❌ 算仓结果缺少集群: {cluster_label}")
+                    err = f"算仓结果缺少集群: {cluster_label}"
+                    print(f"❌ {err}")
                     errors = info_res.get("errors") or []
                     if errors:
                         print(f"   errors: {errors}")
-                    return None
+                        err = f"{err}; {_api_err_snippet(errors)}"
+                    return None, err, False
 
                 entry, wh_label, state = build_cluster_warehouse_entry(
                     cluster_block, mc_id, crossdock=crossdock
                 )
                 if not entry:
                     log_cluster_warehouse_diagnostics(cluster_block, cluster_label)
+                    err = summarize_cluster_storage_rejection(
+                        cluster_block, cluster_label, skus=skus
+                    )
+                    print(f"❌ {err}")
                     errors = info_res.get("errors") or []
                     if errors:
                         print(f"   errors: {errors}")
-                    return None
+                    # 存储仓不可用（尤其 MATRIX）与交接仓无关，勿换 ХАБ 重试
+                    return None, err, False
 
                 if entry.get("bundle_id"):
                     print(
@@ -2816,18 +2893,24 @@ def poll_multi_cluster_warehouses(
             missing = expected_ids - found_ids
             if missing:
                 missing_names = [name_by_id.get(i, i) for i in missing]
-                print(f"❌ 算仓结果缺少集群: {missing_names}")
-                return None
-            return selected
+                err = f"算仓结果缺少集群: {missing_names}"
+                print(f"❌ {err}")
+                return None, err, False
+            return selected, "", False
 
         if current_status == "FAILED":
-            print(f"❌ 多集群算仓失败: {info_res.get('errors')}")
-            return None
+            errors = info_res.get("errors") or info_res
+            err = f"多集群算仓失败: {_api_err_snippet(errors)}"
+            print(f"❌ {err}")
+            err_text = json.dumps(errors, ensure_ascii=False) if not isinstance(errors, str) else errors
+            retry = "NOT_AVAILABLE_MATRIX" not in (err_text or "").upper()
+            return None, err, retry
         if current_status in ("IN_PROGRESS", "UNSPECIFIED"):
             time.sleep(3)
             continue
-        print(f"❌ 未知算仓状态: {current_status}")
-        return None
+        err = f"未知算仓状态: {current_status}"
+        print(f"❌ {err}")
+        return None, err, False
 
 
 def create_multi_cluster_draft(
@@ -3053,6 +3136,7 @@ def create_multi_cluster_crossdock_draft(
         f"将依次尝试 {len(delivery_attempts)} 个交接仓方案（草稿层仅 1 个 delivery_info）"
     )
 
+    last_detail = ""
     for idx, (cluster_label, wh) in enumerate(delivery_attempts, start=1):
         dist_hint = (
             f" 距离首选 {wh['distance_km']}km"
@@ -3083,25 +3167,39 @@ def create_multi_cluster_crossdock_draft(
             clusters_info, headers, proxies, delivery_info=delivery_info
         )
         if not draft_id:
+            last_detail = f"交接仓 {wh['name']} 创建草稿失败"
             continue
 
-        selected = poll_multi_cluster_warehouses(
+        selected, poll_err, retry_dropoff = poll_multi_cluster_warehouses(
             draft_id,
             cluster_id_map,
             headers,
             proxies,
             crossdock=True,
+            clusters_info=clusters_info,
         )
         if selected:
             print(
                 f"✅ 多集群草稿算仓通过（草稿 delivery_info 交接仓: {wh['name']}）"
             )
             return draft_id, selected, wh["name"], ""
+
+        last_detail = poll_err or f"交接仓 {wh['name']} 算仓未通过"
+        if not retry_dropoff:
+            # SKU 不在集群矩阵等：换交接仓无效，直接返回真实原因
+            print(f"❌ {last_detail}（换交接仓无效，停止重试）")
+            return None, None, "", last_detail
         print(f"⚠️ 交接仓 {wh['name']} 算仓未通过，尝试下一方案...")
-    err = (
-        f"多集群中转草稿失败：已尝试 {len(delivery_attempts)} 个交接仓方案，"
-        "算仓均未通过"
-    )
+    if last_detail:
+        err = (
+            f"多集群中转草稿失败：已尝试 {len(delivery_attempts)} 个交接仓方案。"
+            f"末次原因: {last_detail}"
+        )
+    else:
+        err = (
+            f"多集群中转草稿失败：已尝试 {len(delivery_attempts)} 个交接仓方案，"
+            "算仓均未通过"
+        )
     return None, None, "", err
 
 
