@@ -32,9 +32,15 @@ def _parse_ship_date(raw) -> date | None:
     return datetime.strptime(str(raw), "%Y-%m-%d").date()
 
 
+def _fail_row_ids(failed: list[dict], row_ids, reason: str) -> None:
+    for uid in row_ids or []:
+        if uid is None or uid == "":
+            continue
+        failed.append({"id": str(int(uid)), "reason": reason})
+
+
 def _fail_rows(failed: list[dict], rows, reason: str) -> None:
-    for uid in _row_ids(rows):
-        failed.append({"id": uid, "reason": reason})
+    _fail_row_ids(failed, _row_ids(rows), reason)
 
 
 def _should_upload_dingpan(params: dict[str, Any]) -> bool:
@@ -161,7 +167,7 @@ def _run_full(params: dict[str, Any]) -> dict[str, Any]:
             task_idx += 1
             group_rows = group.get("rows") or []
             try:
-                export_bundle, apply_error = core.run_group_application(
+                export_bundle, apply_error, fail_meta = core.run_group_application(
                     group,
                     drop_off_warehouse_name=drop_off,
                 )
@@ -170,12 +176,18 @@ def _run_full(params: dict[str, Any]) -> dict[str, Any]:
                 continue
 
             if not export_bundle:
-                _fail_rows(
-                    failed,
-                    group_rows,
+                reason = (
                     apply_error
-                    or f"{group['shipping_method']}单 {shipper} 申请失败",
+                    or f"{group['shipping_method']}单 {shipper} 申请失败"
                 )
+                failed_ids = (fail_meta or {}).get("failed_row_ids") or []
+                ok_ids = (fail_meta or {}).get("ok_row_ids") or []
+                if failed_ids:
+                    _fail_row_ids(failed, failed_ids, reason)
+                    if ok_ids:
+                        success.extend(list(dict.fromkeys(ok_ids)))
+                else:
+                    _fail_rows(failed, group_rows, reason)
                 continue
 
             success.extend(_row_ids(group_rows))
