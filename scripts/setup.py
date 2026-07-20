@@ -70,23 +70,6 @@ async def setup():
         pid = proj["id"]
         print("[setup] Default project exists")
 
-    # Seed demo APIs if none
-    count = await execute_one("SELECT COUNT(*) AS c FROM interfaces WHERE project_id=%s", (pid,))
-    if count["c"] == 0:
-        demos = [
-            ("获取用户列表", "GET", "https://jsonplaceholder.typicode.com/users"),
-            ("获取单用户", "GET", "https://jsonplaceholder.typicode.com/users/1"),
-            ("创建文章", "POST", "https://jsonplaceholder.typicode.com/posts"),
-            ("更新文章", "PUT", "https://jsonplaceholder.typicode.com/posts/1"),
-            ("删除文章", "DELETE", "https://jsonplaceholder.typicode.com/posts/1"),
-        ]
-        for name, method, path in demos:
-            await execute_insert(
-                "INSERT INTO interfaces (project_id,name,description,method,path,body_type,status) VALUES (%s,%s,%s,%s,%s,%s,%s)",
-                (pid, name, "", method, path, "none", "published"),
-            )
-        print("[setup] Demo APIs seeded")
-
     # Register built-in service APIs (idempotent by path)
     builtins = [
         (
