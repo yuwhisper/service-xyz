@@ -110,6 +110,13 @@ async def setup():
             "/service/zyx/jst/gettoken",
             "none",
         ),
+        (
+            "聚水潭查询商品资料",
+            "按 SKU 查询聚水潭商品资料，返回 /open/sku/query 原始字段",
+            "GET",
+            "/service/zyx/jst/sku/query",
+            "none",
+        ),
     ]
     for name, desc, method, path, body_type in builtins:
         exists = await execute_one(

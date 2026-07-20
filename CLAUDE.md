@@ -109,6 +109,8 @@ python server/main.py
 | POST | /service/zyx/dingtalk/dingpan/upload | — | 钉钉钉盘上传 |
 | GET | /service/zyx/jst/gettoken | — | 聚水潭 access_token |
 | POST | /service/zyx/jst/gettoken | — | 聚水潭 access_token（可传 code/force） |
+| GET | /service/zyx/jst/sku/query | — | 聚水潭按 SKU 查商品资料（`?sku=`，返回原始字段） |
+| POST | /service/zyx/jst/sku/query | — | 聚水潭按 SKU 查商品资料（body: `{sku}`） |
 
 ## 数据库
 

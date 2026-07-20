@@ -198,15 +198,14 @@ def get_access_token() -> str:
     return fetch_token_info()["access_token"]
 
 
-def query_skus(sku_ids: list[str]) -> dict[str, dict[str, Any]]:
-    """Batch query SKU details; returns {sku: {image_url, freight_price}}."""
+def _fetch_sku_query_datas(sku_ids: list[str]) -> list[dict[str, Any]]:
+    """Call /open/sku/query and return raw datas[] items."""
     unique = list(dict.fromkeys(s.strip() for s in sku_ids if s and str(s).strip()))
     if not unique:
-        return {}
+        return []
 
-    result: dict[str, dict[str, Any]] = {}
+    items: list[dict[str, Any]] = []
     token = get_access_token()
-
     for i in range(0, len(unique), SKU_QUERY_BATCH_SIZE):
         batch = unique[i : i + SKU_QUERY_BATCH_SIZE]
         biz_data = {
@@ -222,13 +221,31 @@ def query_skus(sku_ids: list[str]) -> dict[str, dict[str, Any]]:
         }
         data = _post_form(SKU_QUERY_PATH, params)
         for item in (data.get("data") or {}).get("datas") or []:
-            sku_id = (item.get("sku_id") or item.get("i_id") or "").strip()
-            if not sku_id:
-                continue
-            pic = (item.get("pic") or "").strip()
-            price = item.get("other_price_5")
-            result[sku_id] = {
-                "image_url": pic,
-                "freight_price": price,
-            }
+            if isinstance(item, dict):
+                items.append(item)
+    return items
+
+
+def query_sku_raw(sku_id: str) -> dict[str, Any] | None:
+    """Query one SKU; return full raw item from Jushuitan datas[] or None."""
+    sku = (sku_id or "").strip()
+    if not sku:
+        raise ValueError("sku 不能为空")
+    items = _fetch_sku_query_datas([sku])
+    return items[0] if items else None
+
+
+def query_skus(sku_ids: list[str]) -> dict[str, dict[str, Any]]:
+    """Batch query SKU details; returns {sku: {image_url, freight_price}}."""
+    result: dict[str, dict[str, Any]] = {}
+    for item in _fetch_sku_query_datas(sku_ids):
+        sku_id = (item.get("sku_id") or item.get("i_id") or "").strip()
+        if not sku_id:
+            continue
+        pic = (item.get("pic") or "").strip()
+        price = item.get("other_price_5")
+        result[sku_id] = {
+            "image_url": pic,
+            "freight_price": price,
+        }
     return result
