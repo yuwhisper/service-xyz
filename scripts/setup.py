@@ -100,6 +100,13 @@ async def setup():
             "/service/zyx/jst/sku/query",
             "none",
         ),
+        (
+            "聚水潭查询订单详情",
+            "按内部单号或线上单号查询订单详情，返回 /open/orders/single/query 原始数据",
+            "GET",
+            "/service/zyx/jst/order/query",
+            "none",
+        ),
     ]
     for name, desc, method, path, body_type in builtins:
         exists = await execute_one(

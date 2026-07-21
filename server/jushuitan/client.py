@@ -1,4 +1,4 @@
-"""Jushuitan OpenAPI client — token + SKU query."""
+"""Jushuitan OpenAPI client — token + SKU/order query."""
 from __future__ import annotations
 
 import hashlib
@@ -16,6 +16,7 @@ from server.jushuitan.config import (
     AUTH_CODE,
     INIT_TOKEN_PATH,
     OPENAPI_BASE,
+    ORDER_QUERY_PATH,
     REFRESH_TOKEN_PATH,
     SKU_QUERY_BATCH_SIZE,
     SKU_QUERY_PATH,
@@ -249,3 +250,28 @@ def query_skus(sku_ids: list[str]) -> dict[str, dict[str, Any]]:
             "freight_price": price,
         }
     return result
+
+
+def query_order_raw(
+    *,
+    o_id: str | None = None,
+    so_id: str | None = None,
+) -> dict[str, Any]:
+    """Query one order via /open/orders/single/query; return raw data dict."""
+    o_text = (o_id or "").strip()
+    so_text = (so_id or "").strip()
+    if o_text:
+        biz_data: dict[str, Any] = {"o_ids": [o_text], "is_get_cbfinance": True}
+    elif so_text:
+        biz_data = {"so_ids": [so_text], "is_get_cbfinance": True}
+    else:
+        raise ValueError("o_id 或 so_id 至少传一个")
+
+    params = {
+        "access_token": get_access_token(),
+        "timestamp": int(time.time()),
+        "version": "2",
+        "biz": json.dumps(biz_data, ensure_ascii=False),
+    }
+    data = _post_form(ORDER_QUERY_PATH, params)
+    return data.get("data") or {}

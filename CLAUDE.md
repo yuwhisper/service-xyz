@@ -111,6 +111,8 @@ python server/main.py
 | POST | /service/zyx/jst/gettoken | — | 聚水潭 access_token（可传 code/force） |
 | GET | /service/zyx/jst/sku/query | — | 聚水潭按 SKU 查商品资料（`?sku=`，返回原始字段） |
 | POST | /service/zyx/jst/sku/query | — | 聚水潭按 SKU 查商品资料（body: `{sku}`） |
+| GET | /service/zyx/jst/order/query | — | 聚水潭查订单详情（`?o_id=` 或 `?so_id=`，返回原始 data） |
+| POST | /service/zyx/jst/order/query | — | 聚水潭查订单详情（body: `{o_id}` 或 `{so_id}`） |
 
 ## 数据库
 

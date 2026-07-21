@@ -3,7 +3,7 @@ import asyncio
 from fastapi import APIRouter, Body, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from server.jushuitan.client import fetch_token_info, query_sku_raw
+from server.jushuitan.client import fetch_token_info, query_order_raw, query_sku_raw
 
 router = APIRouter(prefix="/service/zyx/jst", tags=["jushuitan"])
 
@@ -21,6 +21,11 @@ class GetTokenBody(BaseModel):
 
 class SkuQueryBody(BaseModel):
     sku: str = Field(..., description="聚水潭 SKU / 货号")
+
+
+class OrderQueryBody(BaseModel):
+    o_id: str | None = Field(default=None, description="聚水潭内部订单号")
+    so_id: str | None = Field(default=None, description="线上订单号")
 
 
 @router.get("/gettoken")
@@ -46,6 +51,19 @@ async def query_sku_get(
 @router.post("/sku/query")
 async def query_sku_post(body: SkuQueryBody):
     return await _query_sku(body.sku)
+
+
+@router.get("/order/query")
+async def query_order_get(
+    o_id: str | None = Query(None, description="聚水潭内部订单号"),
+    so_id: str | None = Query(None, description="线上订单号"),
+):
+    return await _query_order(o_id=o_id, so_id=so_id)
+
+
+@router.post("/order/query")
+async def query_order_post(body: OrderQueryBody):
+    return await _query_order(o_id=body.o_id, so_id=body.so_id)
 
 
 def _get_token(*, force: bool, code: str | None):
@@ -74,6 +92,18 @@ async def _query_sku(sku: str):
                 "item": item,
             },
         }
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(502, str(e)) from e
+    except Exception as e:
+        raise HTTPException(500, str(e)) from e
+
+
+async def _query_order(*, o_id: str | None, so_id: str | None):
+    try:
+        data = await asyncio.to_thread(query_order_raw, o_id=o_id, so_id=so_id)
+        return {"code": 0, "data": data}
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
     except RuntimeError as e:
