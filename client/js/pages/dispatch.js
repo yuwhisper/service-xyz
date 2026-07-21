@@ -1,4 +1,21 @@
-import { ref, inject, onMounted } from 'vue';
+import { ref, computed, inject, onMounted } from 'vue';
+
+/** 各接口执行参数定义；未列出的接口视为无参 */
+const API_PARAMS = {
+  '/service/zyx/jst/order/query': [
+    { key: 'o_id', label: 'o_id（内部订单号）', type: 'text' },
+    { key: 'so_id', label: 'so_id（线上订单号）', type: 'text' },
+  ],
+  '/service/zyx/jst/sku/query': [
+    { key: 'sku', label: 'sku（货号）', type: 'text' },
+  ],
+  '/service/zyx/dingtalk/dingpan/upload': [
+    { key: 'local_path', label: 'local_path（服务器本地路径）', type: 'text' },
+    { key: 'as_zip', label: 'as_zip（目录先压缩）', type: 'bool' },
+    { key: 'save_name', label: 'save_name（钉盘保存名）', type: 'text' },
+    { key: 'folder_url', label: 'folder_url（钉盘文件夹链接）', type: 'text' },
+  ],
+};
 
 export default {
   template: `
@@ -34,8 +51,17 @@ export default {
     <!-- Execute Modal -->
     <modal-box title="执行 API" :visible="!!execApi" @close="execApi=null">
       <div class="form-group"><label class="form-label">{{execApi?.method}} {{execApi?.path}}</label></div>
-      <div class="form-group"><label class="form-label">Query Params (JSON)</label><textarea class="form-textarea" v-model="execParams" rows="4" placeholder='{"key":"value"}'></textarea></div>
-      <div class="form-group"><label class="form-label">Headers (JSON)</label><textarea class="form-textarea" v-model="execHeaders" rows="2" placeholder='{"Authorization":"Bearer xxx"}'></textarea></div>
+      <template v-if="execFields.length">
+        <div class="form-group" v-for="f in execFields" :key="f.key">
+          <label class="form-label">{{f.label}}</label>
+          <label v-if="f.type==='bool'" style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+            <input type="checkbox" v-model="execForm[f.key]" />
+            <span>是</span>
+          </label>
+          <input v-else class="form-input" v-model="execForm[f.key]" :placeholder="f.label" />
+        </div>
+      </template>
+      <div v-else class="form-group" style="color:#86909c;font-size:13px">此接口无需填写参数</div>
       <div class="modal-footer">
         <button class="btn btn-ghost" @click="execApi=null">取消</button>
         <button class="btn btn-primary" @click="doExec" :disabled="executing">{{executing?'提交中...':'提交执行'}}</button>
@@ -73,9 +99,14 @@ export default {
     const apis = ref([]); const loading = ref(true);
     const keyword = ref(''); const methodFilter = ref('');
     const methods = ['GET','POST','PUT','DELETE','PATCH'];
-    const execApi = ref(null); const execParams = ref('{}'); const execHeaders = ref('{}'); const executing = ref(false);
+    const execApi = ref(null); const execForm = ref({}); const executing = ref(false);
     const logApi = ref(null); const logs = ref([]);
     const detailLog = ref(null);
+
+    const execFields = computed(() => {
+      const path = execApi.value?.path || '';
+      return API_PARAMS[path] || [];
+    });
 
     async function loadData() {
       loading.value = true;
@@ -83,12 +114,36 @@ export default {
     }
     onMounted(loadData);
 
-    function openExec(a) { execApi.value = a; execParams.value = '{}'; execHeaders.value = '{}'; }
+    function openExec(a) {
+      execApi.value = a;
+      const form = {};
+      for (const f of (API_PARAMS[a.path] || [])) {
+        form[f.key] = f.type === 'bool' ? false : '';
+      }
+      execForm.value = form;
+    }
+
+    function buildParams() {
+      const out = {};
+      for (const f of execFields.value) {
+        const v = execForm.value[f.key];
+        if (f.type === 'bool') {
+          if (v) out[f.key] = true;
+          continue;
+        }
+        const text = (v == null ? '' : String(v)).trim();
+        if (text) out[f.key] = text;
+      }
+      return out;
+    }
+
     async function doExec() {
       executing.value = true;
       try {
-        let p={},h={}; try{p=JSON.parse(execParams.value)}catch{} try{h=JSON.parse(execHeaders.value)}catch{}
-        await http.post(`/service/zyx/apis/${execApi.value.id}/execute`,{params:p,headers:h});
+        await http.post(`/service/zyx/apis/${execApi.value.id}/execute`, {
+          params: buildParams(),
+          headers: {},
+        });
         execApi.value = null;
         show('已提交执行，请在数据中心查看结果');
       } catch(e) { show('执行失败: '+(e.response?.data?.detail||e.message),'error'); }
@@ -101,6 +156,6 @@ export default {
     }
 
     function fmt(d) { if(!d) return '-'; return new Date(d).toLocaleString(); }
-    return { apis, loading, keyword, methodFilter, methods, loadData, execApi, execParams, execHeaders, executing, openExec, doExec, logApi, logs, openLogs, detailLog, fmt };
+    return { apis, loading, keyword, methodFilter, methods, loadData, execApi, execForm, execFields, executing, openExec, doExec, logApi, logs, openLogs, detailLog, fmt };
   }
 };
