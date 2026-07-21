@@ -137,6 +137,10 @@ tbody tr:hover{background:#fafbfc}
 /* ====== Log Response ====== */
 .log-response{background:#1a1d24;color:#c9d1d9;padding:14px 16px;border-radius:var(--radius-sm);font-family:"Cascadia Code","Fira Code","JetBrains Mono",monospace;font-size:12px;max-height:320px;overflow:auto;white-space:pre-wrap;word-break:break-all;line-height:1.7}
 
+/* ====== Pagination ====== */
+.pagination{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:16px;padding-top:12px;border-top:1px solid var(--c-border-l)}
+.pagination-info{font-size:12px;color:var(--c-sub)}
+
 /* ====== Cron helper ====== */
 .cron-helper{font-size:12px;color:var(--c-sub);margin-top:4px;line-height:1.7}
 

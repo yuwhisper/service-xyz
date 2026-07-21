@@ -1,4 +1,4 @@
-import { ref, computed, inject, onMounted } from 'vue';
+import { ref, computed, inject, onMounted, watch } from 'vue';
 
 export default {
   template: `
@@ -11,8 +11,22 @@ export default {
       </div>
     </div>
     <div class="card">
-      <div class="card-header"><span class="card-title">执行日志</span><span style="font-size:12px;color:#86909c">最近 {{logs.length}} 条</span></div>
-      <div v-if="!logs.length" class="empty-state"><div class="empty-state-icon">📋</div><p>暂无调用记录，前往「调度任务」执行 API</p></div>
+      <div class="card-header">
+        <span class="card-title">执行日志</span>
+        <span style="font-size:12px;color:#86909c">共 {{total}} 条</span>
+      </div>
+      <div class="toolbar">
+        <input class="search-input" v-model="keyword" placeholder="搜索路径或接口名..." @keyup.enter="search" />
+        <button class="btn btn-primary btn-sm" @click="search">搜索</button>
+        <select class="form-select" v-model.number="pageSize" style="width:110px;margin-left:auto">
+          <option :value="20">20 / 页</option>
+          <option :value="50">50 / 页</option>
+          <option :value="100">100 / 页</option>
+          <option :value="200">200 / 页</option>
+        </select>
+      </div>
+      <div v-if="loading" class="empty-state"><p>加载中...</p></div>
+      <div v-else-if="!logs.length" class="empty-state"><div class="empty-state-icon">📋</div><p>暂无调用记录，前往「调度任务」执行 API</p></div>
       <div v-else class="table-wrap">
         <table>
           <thead><tr><th>接口</th><th>方法</th><th>路径</th><th>状态</th><th>耗时</th><th>触发</th><th>时间</th><th></th></tr></thead>
@@ -30,6 +44,11 @@ export default {
           </tbody>
         </table>
       </div>
+      <div v-if="totalPages>1 || total>0" class="pagination">
+        <button class="btn btn-ghost btn-sm" :disabled="page<=1" @click="page--">上一页</button>
+        <span class="pagination-info">第 {{page}} / {{totalPages||1}} 页</span>
+        <button class="btn btn-ghost btn-sm" :disabled="page>=totalPages" @click="page++">下一页</button>
+      </div>
     </div>
     <modal-box title="执行详情" :visible="!!detailLog" @close="detailLog=null">
       <div v-if="detailLog" style="display:grid;grid-template-columns:1fr 1fr;gap:12px 24px;margin-bottom:16px">
@@ -44,18 +63,76 @@ export default {
     </modal-box>
   </div>`,
   setup() {
-    const stats = ref(null); const logs = ref([]); const detailLog = ref(null);
+    const stats = ref(null);
+    const logs = ref([]);
+    const detailLog = ref(null);
+    const loading = ref(false);
+    const keyword = ref('');
+    const page = ref(1);
+    const pageSize = ref(20);
+    const total = ref(0);
     const http = inject('http');
-    onMounted(async () => {
-      try { const r = await http.get('/service/zyx/dashboard/stats'); stats.value = r.data.data; logs.value = r.data.data.recent_logs||[]; } catch(e){}
-    });
+
+    const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value) || 1));
+
     const statsList = computed(() => [
       { icon:'🔗',value:stats.value?.total_apis||0,label:'接口总数',color:'#165dff',bg:'#e8f0fe'},
       { icon:'⚡',value:stats.value?.today_calls||0,label:'今日调用',color:'#00b42a',bg:'#e8ffea'},
       { icon:'📋',value:stats.value?.total_logs||0,label:'累计日志',color:'#722ed1',bg:'#f5edff'},
       { icon:'⏰',value:stats.value?.active_schedules||0,label:'活跃定时',color:'#ff7d00',bg:'#fff7e8'},
     ]);
+
+    async function loadStats() {
+      try {
+        const r = await http.get('/service/zyx/dashboard/stats');
+        stats.value = r.data.data;
+      } catch (e) {}
+    }
+
+    async function loadLogs() {
+      loading.value = true;
+      try {
+        const q = new URLSearchParams({
+          keyword: keyword.value,
+          page: String(page.value),
+          page_size: String(pageSize.value),
+        });
+        const r = await http.get(`/service/zyx/dashboard/logs?${q}`);
+        const data = r.data.data || {};
+        logs.value = data.items || [];
+        total.value = data.total || 0;
+        if (page.value > 1 && !logs.value.length && total.value > 0) {
+          page.value = 1;
+          return;
+        }
+      } catch (e) {
+        logs.value = [];
+        total.value = 0;
+      } finally {
+        loading.value = false;
+      }
+    }
+
+    function search() {
+      if (page.value === 1) loadLogs();
+      else page.value = 1;
+    }
+
+    watch(page, loadLogs);
+    watch(pageSize, () => {
+      if (page.value === 1) loadLogs();
+      else page.value = 1;
+    });
+
+    onMounted(async () => {
+      await loadStats();
+      await loadLogs();
+    });
+
     function fmt(d) { if(!d) return '-'; return new Date(d).toLocaleString(); }
-    return { stats, logs, detailLog, statsList, fmt };
+    return {
+      stats, logs, detailLog, loading, keyword, page, pageSize, total, totalPages,
+      statsList, search, fmt,
+    };
   }
 };
