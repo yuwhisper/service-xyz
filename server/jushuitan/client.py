@@ -15,6 +15,7 @@ from server.jushuitan.config import (
     APP_SECRET,
     AUTH_CODE,
     INIT_TOKEN_PATH,
+    INVENTORY_QUERY_PATH,
     OPENAPI_BASE,
     ORDER_QUERY_PATH,
     REFRESH_TOKEN_PATH,
@@ -97,7 +98,8 @@ def _apply_token_response(data: dict[str, Any], source: str) -> dict[str, Any]:
         except (TypeError, ValueError):
             _token_expires_at = time.time() + 3600
     else:
-        _token_expires_at = time.time() + 86400 * 30
+        # 未返回 expires_in 时不要按 30 天缓存，避免过期仍被当成有效
+        _token_expires_at = time.time() + 3600
     save_tokens(
         access_token=_cached_access_token,
         refresh_token=_cached_refresh_token,
@@ -195,8 +197,43 @@ def fetch_token_info(*, force: bool = False, code: str | None = None) -> dict[st
         raise RuntimeError("获取聚水潭 access_token 失败: " + " | ".join(errors))
 
 
-def get_access_token() -> str:
-    return fetch_token_info()["access_token"]
+def get_access_token(*, force: bool = False) -> str:
+    return fetch_token_info(force=force)["access_token"]
+
+
+def _is_token_invalid_error(exc: BaseException) -> bool:
+    text = str(exc)
+    return (
+        "[100]" in text
+        or "access_token" in text.lower()
+        or "令牌" in text
+        or "认证失败" in text
+    )
+
+
+def _post_biz(path: str, biz_data: dict[str, Any]) -> dict[str, Any]:
+    """POST business API with access_token; auto-refresh once on token failure."""
+    token = get_access_token()
+    params = {
+        "access_token": token,
+        "timestamp": int(time.time()),
+        "version": "2",
+        "biz": json.dumps(biz_data, ensure_ascii=False),
+    }
+    try:
+        return _post_form(path, params)
+    except RuntimeError as e:
+        if not _is_token_invalid_error(e):
+            raise
+        # 本地缓存未过期但聚水潭已判失效 → 强制换 token 后重试一次
+        token = get_access_token(force=True)
+        params = {
+            "access_token": token,
+            "timestamp": int(time.time()),
+            "version": "2",
+            "biz": json.dumps(biz_data, ensure_ascii=False),
+        }
+        return _post_form(path, params)
 
 
 def _fetch_sku_query_datas(sku_ids: list[str]) -> list[dict[str, Any]]:
@@ -206,7 +243,6 @@ def _fetch_sku_query_datas(sku_ids: list[str]) -> list[dict[str, Any]]:
         return []
 
     items: list[dict[str, Any]] = []
-    token = get_access_token()
     for i in range(0, len(unique), SKU_QUERY_BATCH_SIZE):
         batch = unique[i : i + SKU_QUERY_BATCH_SIZE]
         biz_data = {
@@ -214,13 +250,7 @@ def _fetch_sku_query_datas(sku_ids: list[str]) -> list[dict[str, Any]]:
             "page_index": 1,
             "page_size": max(len(batch), 1),
         }
-        params = {
-            "access_token": token,
-            "timestamp": int(time.time()),
-            "version": "2",
-            "biz": json.dumps(biz_data, ensure_ascii=False),
-        }
-        data = _post_form(SKU_QUERY_PATH, params)
+        data = _post_biz(SKU_QUERY_PATH, biz_data)
         for item in (data.get("data") or {}).get("datas") or []:
             if isinstance(item, dict):
                 items.append(item)
@@ -267,11 +297,56 @@ def query_order_raw(
     else:
         raise ValueError("o_id 或 so_id 至少传一个")
 
-    params = {
-        "access_token": get_access_token(),
-        "timestamp": int(time.time()),
-        "version": "2",
-        "biz": json.dumps(biz_data, ensure_ascii=False),
-    }
-    data = _post_form(ORDER_QUERY_PATH, params)
+    data = _post_biz(ORDER_QUERY_PATH, biz_data)
     return data.get("data") or {}
+
+
+def _normalize_wms_co_ids(wms_co_ids: list[Any] | None) -> list[int]:
+    """Normalize warehouse ids; empty/None → [0] (all warehouses total)."""
+    if not wms_co_ids:
+        return [0]
+    ids: list[int] = []
+    for x in wms_co_ids:
+        if x is None or str(x).strip() == "":
+            continue
+        ids.append(int(x))
+    return ids or [0]
+
+
+def query_inventory_by_sku(
+    sku_id: str,
+    wms_co_ids: list[Any] | None = None,
+    *,
+    has_lock_qty: bool = True,
+) -> list[dict[str, Any]]:
+    """
+    Query inventory for one SKU across one or more warehouses.
+
+    Returns a list of raw inventory dicts (each includes wms_co_id).
+    Warehouses with no row are omitted.
+    Empty wms_co_ids → query all-warehouse total (wms_co_id=0).
+    """
+    sku = (sku_id or "").strip()
+    if not sku:
+        raise ValueError("sku 不能为空")
+
+    warehouse_ids = _normalize_wms_co_ids(wms_co_ids)
+    results: list[dict[str, Any]] = []
+
+    for wid in warehouse_ids:
+        biz_data = {
+            "sku_ids": sku,
+            "page_index": 1,
+            "page_size": 30,
+            "has_lock_qty": bool(has_lock_qty),
+            "wms_co_id": int(wid),
+        }
+        data = _post_biz(INVENTORY_QUERY_PATH, biz_data)
+        inventorys = (data.get("data") or {}).get("inventorys") or []
+        if not inventorys:
+            continue
+        item = dict(inventorys[0])
+        item["wms_co_id"] = int(wid)
+        results.append(item)
+
+    return results

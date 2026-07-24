@@ -9,6 +9,10 @@ const API_PARAMS = {
   '/service/zyx/jst/sku/query': [
     { key: 'sku', label: 'sku（货号）', type: 'text' },
   ],
+  '/service/zyx/jst/inventory/query': [
+    { key: 'sku', label: 'sku（商品编码）', type: 'text' },
+    { key: 'wms_co_ids', label: 'wms_co_ids（分仓编号，JSON数组如[15774928]）', type: 'text' },
+  ],
   '/service/zyx/dingtalk/dingpan/upload': [
     { key: 'local_path', label: 'local_path（服务器本地路径）', type: 'text' },
     { key: 'as_zip', label: 'as_zip（目录先压缩）', type: 'bool' },

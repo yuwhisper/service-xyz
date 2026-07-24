@@ -8,6 +8,7 @@ AUTH_CODE = os.getenv("JUSHUITAN_AUTH_CODE", "")
 OPENAPI_BASE = os.getenv("JUSHUITAN_OPENAPI_BASE", "https://openapi.jushuitan.com")
 SKU_QUERY_PATH = "/open/sku/query"
 ORDER_QUERY_PATH = "/open/orders/single/query"
+INVENTORY_QUERY_PATH = "/open/inventory/query"
 INIT_TOKEN_PATH = "/openWeb/auth/getInitToken"
 ACCESS_TOKEN_PATH = "/openWeb/auth/accessToken"
 REFRESH_TOKEN_PATH = "/openWeb/auth/refreshToken"

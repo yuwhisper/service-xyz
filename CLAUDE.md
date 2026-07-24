@@ -1,191 +1,239 @@
 ## 项目概述
 
-**Service XYZ** — 接口管理后台（API Management Console），参考影刀 RPA 控制台 UI 设计，提供 API 接口的统一管理、调试执行和定时调度能力。
+**Service XYZ** — 接口管理后台 + 业务 API 网关。
+
+- 控制台：按影刀风格管理/调试/调度 HTTP 接口，查看执行日志
+- 内置业务：Ozon FBO 发货、钉钉钉盘上传、聚水潭 Token / SKU / 订单 / 库存查询
+- 全站 API **免 JWT**，影刀等外部系统可直接调用
 
 ## 沟通方式
 
 - 默认中文回复；代码、命令、变量名、文件路径保持英文
-- 结论先行，简洁直接，不先铺垫背景
-- 给真实判断——方案有问题直接指出，发现更好做法主动说明
+- 结论先行，简洁直接
+- 方案有问题直接指出，发现更好做法主动说明
 
 ## Git
 
-- 不自动 `git commit` 或 `git push`，除非我明确要求
-- **我说「提交」= `git commit` + `git push`**（本地保存并推送到 GitHub）
-- 提交前先展示将要提交的变更摘要
-- commit message 格式：**`yyyy-MM-dd HH:mm` + 我给的名称**（例：`2026-06-29 10:36 修改 README`）
+- 不自动 `git commit` / `git push`，除非明确要求
+- **「提交」= `git commit` + `git push`**
+- commit message：`yyyy-MM-dd HH:mm` + 改动简述（例：`2026-07-21 15:30 更新钉钉钉盘默认上传文件夹链接`）
 
 ## 红线操作
 
-以下操作即使在 auto-accept 模式下也必须先问我：
+以下操作必须先确认：
+
 - 删除文件、目录或 git 历史
 - 修改 `.env`、密钥、token、证书、CI/CD 配置
 - `git rebase`、`git reset --hard`、强制推送
-- 未经要求不要 `git push`（**我说「提交」时除外**）
-- 公开发布（`npm publish`、生产部署等）
+- 未经要求不要 `git push`（「提交」时除外）
 
 ## 技术栈
 
-| 层 | 技术 | 版本 |
-|----|------|------|
-| 后端框架 | FastAPI (Python) | latest |
-| 数据库 | MySQL (远程 121.43.75.44) + aiomysql | — |
-| 认证 | 无（全站 API 免 JWT，供影刀等外部系统直接调用） | — |
-| 前端框架 | React (CDN esm.sh, 零构建) | ^18.3 |
+| 层 | 技术 |
+|----|------|
+| 后端 | FastAPI + uvicorn + aiomysql / pymysql |
+| 数据库 | MySQL（库名 `zyx`） |
+| 认证 | 业务 API 免 JWT；`auth.py` 仍有登录发 token 能力，路由未强制校验 |
+| 前端 | Vue 3 + axios（CDN esm.sh，零构建，无 npm） |
+| 业务依赖 | requests、openpyxl、Pillow、pymupdf |
 
-> **注意**: 机器装有绿盾软件，npm 写入的 node_modules 会被透明加密。前端用 CDN import map 加载 React，无本地 node_modules 和构建步骤。
+> 机器装有绿盾：npm `node_modules` 会被透明加密。前端必须走 CDN import map，禁止引入本地构建链。
 
 ## 目录结构
 
 ```
 service-xyz/
-├── server/                  # Python 后端（FastAPI）
-│   ├── main.py              # 入口 + CORS + 静态文件 + SPA fallback
-│   ├── config.py            # 配置（config.json + 环境变量）
-│   ├── database.py          # aiomysql 连接池
-│   ├── auth.py              # JWT 认证 + 密码哈希
-│   └── routers/
-│       ├── auth.py          # POST /service/zyx/auth/login
-│       ├── dashboard.py     # GET  /service/zyx/dashboard/stats
-│       ├── apis.py          # CRUD /service/zyx/apis + execute + logs
-│       ├── schedules.py     # CRUD /service/zyx/schedules
-│       └── ozon.py          # POST /service/zyx/ozon/fahuo（示例：内置业务 API）
-├── client/                  # 前端（纯静态，CDN 加载）
-│   ├── index.html           # 入口 + import map
-│   ├── css/app.css          # 影刀风格样式
+├── server/                      # FastAPI 后端
+│   ├── main.py                  # 入口：CORS、路由、静态资源、SPA fallback
+│   ├── config.py                # config.json + 环境变量
+│   ├── database.py              # aiomysql 连接池
+│   ├── auth.py                  # JWT / 密码哈希（可选登录）
+│   ├── routers/
+│   │   ├── auth.py              # /service/zyx/auth/*
+│   │   ├── dashboard.py         # 统计 + 全量日志分页搜索
+│   │   ├── apis.py              # interfaces CRUD / 执行 / 日志
+│   │   ├── schedules.py         # 定时任务 CRUD
+│   │   ├── ozon.py              # Ozon FBO 发货
+│   │   ├── dingtalk.py          # 钉盘上传
+│   │   └── jst.py               # 聚水潭 token / SKU / 订单 / 库存
+│   ├── ozon/                    # fahuo_core + fahuo_runner
+│   ├── jushuitan/               # OpenAPI client + token 缓存
+│   └── dingtalk/                # 钉盘上传实现
+├── client/                      # Vue 3 SPA（纯静态）
+│   ├── index.html               # import map 入口
+│   ├── css/app.css
 │   └── js/
-│       ├── app.js           # SPA 布局 + 路由
-│       ├── api.js           # axios 实例 + JWT 拦截
-│       ├── auth.js          # AuthContext
-│       ├── components/
-│       │   ├── sidebar.js   # 侧边栏导航
-│       │   ├── modal.js     # 通用弹窗
-│       │   └── stat-card.js # 统计卡片
+│       ├── app.js               # 布局 + 侧边栏 + 页面切换
+│       ├── api.js               # axios 实例
+│       ├── toast.js
 │       └── pages/
-│           ├── login.js     # 登录页
-│           ├── dashboard.js # 数据中心
-│           ├── dispatch.js  # 调度任务
-│           └── schedule.js  # 定时任务
+│           ├── dashboard.js     # 数据中心
+│           ├── dispatch.js      # 调度任务（按接口显示参数框）
+│           ├── schedule.js      # 定时任务
+│           └── login.js         # 登录页（当前未强制登录门禁）
+├── deploy/
+│   ├── deploy.sh                # 服务器部署脚本
+│   ├── service-zyx.service      # systemd（端口 8800）
+│   └── nginx-*.conf
 ├── scripts/
-│   └── setup.py             # 数据库初始化 + 种子数据
-└── config.json              # 项目配置
+│   ├── setup.py                 # 建表 + 种子 + 登记内置 API
+│   └── setup_ozon_table.sql     # Ozon 装箱发货登记表（手动执行）
+├── .github/workflows/deploy.yml # Actions：打包 SCP 部署
+├── docs/                        # 影刀等调用说明
+├── .env.example
+├── config.json.example
+├── requirements.txt
+├── CLAUDE.md
+└── README.md
 ```
 
-## 快速开始
+运行时数据（不入库）：
+
+- `/opt/service-zyx/ozon-fahuo-data` — 发货输出归档（`OZON_ARCHIVE_ROOT`）
+- `/opt/service-zyx/.jst_tokens.json` — 聚水潭 token 缓存
+
+## 快速开始（本地）
 
 ```bash
-# 1. 安装 Python 依赖
-pip install fastapi uvicorn aiomysql pyjwt python-jose passlib aiohttp
-
-# 2. 初始化数据库（建表 + 种子数据）
+pip install -r requirements.txt
+cp config.json.example config.json   # 填数据库
+cp .env.example .env                 # 可选
 python scripts/setup.py
-
-# 3. 启动服务
 python server/main.py
-# 访问 http://localhost:3000
-# 管理员: admin@service-xyz.com / admin123
+# http://localhost:3000
+# 默认账号 username=admin / password=admin123
 ```
+
+| 环境 | 端口 | 说明 |
+|------|------|------|
+| 本地 | `PORT`，默认 **3000** | `python server/main.py` |
+| 生产 | **8800** | systemd `service-zyx` |
+| 域名 | 443 → 8800 | `https://www.ywzhaoran.xyz/service/zyx/` |
+| IP 入口 | 8443 → 8800 | `https://121.43.75.44:8443/`（旧） |
+
+## 生产部署
+
+- 路径：`/opt/service-zyx`，环境文件：`.env`
+- 推送 `main` → GitHub Actions 打包 SCP 上传 → `pip install` → `setup.py` → `systemctl restart service-zyx`
+- 服务器拉 GitHub 常超时，**不要依赖服务器 `git pull`**；以 Actions SCP 为准
+- 手动：`bash /opt/service-zyx/deploy/deploy.sh`
 
 ## API 路由
 
-| Method | Path | Auth | 说明 |
-|--------|------|:--:|------|
-| POST | /service/zyx/auth/login | — | 登录（可选，非必须） |
-| GET | /service/zyx/auth/user/me | — | 返回 guest |
-| GET | /service/zyx/dashboard/stats | — | 概览统计 |
-| GET | /service/zyx/apis | — | 接口列表 |
-| GET | /service/zyx/apis/:id | — | 接口详情 |
-| POST | /service/zyx/apis | — | 创建接口 |
-| PUT | /service/zyx/apis/:id | — | 更新接口 |
-| DELETE | /service/zyx/apis/:id | — | 删除接口 |
-| POST | /service/zyx/apis/:id/execute | — | 执行接口 |
-| GET | /service/zyx/apis/:id/logs | — | 执行日志 |
-| GET | /service/zyx/schedules | — | 定时任务列表 |
-| POST | /service/zyx/schedules | — | 创建定时任务 |
-| PUT | /service/zyx/schedules/:id | — | 更新定时任务 |
-| DELETE | /service/zyx/schedules/:id | — | 删除定时任务 |
-| POST | /service/zyx/ozon/fahuo | — | Ozon FBO 发货（后台任务） |
-| GET | /service/zyx/ozon/fahuo/status/:job_id | — | Ozon 发货任务状态 |
-| POST | /service/zyx/dingtalk/dingpan/upload | — | 钉钉钉盘上传 |
-| GET | /service/zyx/jst/gettoken | — | 聚水潭 access_token |
-| POST | /service/zyx/jst/gettoken | — | 聚水潭 access_token（可传 code/force） |
-| GET | /service/zyx/jst/sku/query | — | 聚水潭按 SKU 查商品资料（`?sku=`，返回原始字段） |
-| POST | /service/zyx/jst/sku/query | — | 聚水潭按 SKU 查商品资料（body: `{sku}`） |
-| GET | /service/zyx/jst/order/query | — | 聚水潭查订单详情（`?o_id=` 或 `?so_id=`，返回原始 data） |
-| POST | /service/zyx/jst/order/query | — | 聚水潭查订单详情（body: `{o_id}` 或 `{so_id}`） |
+前缀均为 `/service/zyx/`。业务路由均免 JWT。
+
+### 控制台
+
+| Method | Path | 说明 |
+|--------|------|------|
+| POST | `/auth/login` | 登录（可选） |
+| GET | `/auth/user/me` | 当前实现固定返回 guest |
+| GET | `/dashboard/stats` | 概览统计 |
+| GET | `/dashboard/logs` | 全量日志；`keyword` 搜路径/接口名；`page` + `page_size`(20/50/100/200) |
+| GET/POST/PUT/DELETE | `/apis`、`/apis/{id}` | 接口定义 CRUD |
+| POST | `/apis/{id}/execute` | 调度执行（内部路径转发本机） |
+| GET | `/apis/{id}/logs` | 单接口最近日志 |
+| GET/POST/PUT/DELETE | `/schedules`、`/schedules/{id}` | 定时任务 |
+
+### 业务
+
+| Method | Path | 说明 |
+|--------|------|------|
+| POST | `/ozon/fahuo` | Ozon FBO 发货；`wait=true` 同步 / 默认异步返回 `job_id` |
+| GET | `/ozon/fahuo/status/{job_id}` | 发货任务状态 |
+| POST | `/dingtalk/dingpan/upload` | 上传本地文件/目录到钉盘 |
+| GET/POST | `/jst/gettoken` | 聚水潭 access_token（`code` / `force`） |
+| GET/POST | `/jst/sku/query` | 按 `sku` 查商品资料，返回原始字段 |
+| GET/POST | `/jst/order/query` | 按 `o_id` 或 `so_id` 查订单，返回原始 data |
+| GET/POST | `/jst/inventory/query` | 按 `sku` + `wms_co_ids` 查分仓库存 |
+
+## 内置业务模块
+
+### Ozon FBO（`server/ozon/`）
+
+- 读表 `ods_ozon_装箱发货登记表`（运营发货日期=当天且发货状态为空）
+- 按 日期+店铺+发货人+发货方式+批次/订单号 分组创供货单，生成箱唛/询价表/顺序表
+- 成功后可选压缩上传钉盘（`OZON_UPLOAD_DINGPAN` / 请求参数 `upload_to_dingpan`）
+- 店铺凭证：`OZON_SHOP_DATA`；归档根：`OZON_ARCHIVE_ROOT`
+
+影刀推荐同步调用：
+
+```http
+POST https://www.ywzhaoran.xyz/service/zyx/ozon/fahuo
+Content-Type: application/json
+
+{"wait": true, "upload_to_dingpan": true}
+```
+
+- HTTP 始终 200，`code` 始终 0
+- `run_status`：`success` / `partial` / `failed` / `skipped`
+- 成功唯一 ID：`data.success`；钉盘 fileId：`data.file_ids`
+- 异步：`{"wait": false}` → 轮询 `/ozon/fahuo/status/{job_id}`
+- Nginx 对 `/service/zyx/ozon` 建议 `proxy_read_timeout` ≥ 1800s
+
+### 钉钉钉盘（`server/dingtalk/`）
+
+- 凭证：`DINGTALK_APP_KEY` / `SECRET` / `UNION_ID`
+- 默认文件夹：`DINGTALK_DEFAULT_FOLDER_URL`（请求可传 `dingpan_folder_url` 覆盖）
+- 上传路径白名单：`DINGTALK_UPLOAD_ALLOW_ROOTS`
+
+### 聚水潭（`server/jushuitan/`）
+
+- Token 与 `/jst/gettoken` 共用 `get_access_token()` 缓存（`.jst_tokens.json`）
+- SKU / 订单 / 库存接口返回聚水潭原始字段，不做翻译或二次加工
+- 库存：`POST /jst/inventory/query`，body `{ "sku": "...", "wms_co_ids": [分仓编号, ...] }`；空列表表示所有仓总库存
 
 ## 数据库
 
-MySQL 远程服务器 `121.43.75.44:3306`，库名 `zyx`。
+库名 `zyx`。主要表：
 
-表：
-- `users` — 用户（email/username/password/role）
-- `projects` — 项目
-- `interfaces` — API 接口定义（method/path/name）
-- `api_logs` — 执行日志（request_params/response_body/status_code/duration_ms）
-- `schedules` — 定时任务（api_id/cron_expression/enabled）
+| 表 | 说明 |
+|----|------|
+| `users` / `projects` | 用户与项目（setup 种子管理员与 Default 项目） |
+| `interfaces` | 控制台可见的 API 目录 |
+| `api_logs` | 执行日志 |
+| `schedules` | 定时任务 |
+| `ods_ozon_装箱发货登记表` | Ozon 待发货登记（见 `scripts/setup_ozon_table.sql`） |
 
-### 新增 API 必须登记 `interfaces` 表
+### 新增 API 必须登记 `interfaces`
 
-**调度任务**、**定时任务**、**数据中心**里的接口列表，全部来自 MySQL `interfaces` 表（`GET /service/zyx/apis`），**不会**自动扫描 FastAPI 路由。
+调度任务 / 定时任务 / 数据中心列表**只读** `interfaces` 表，**不会**自动扫描 FastAPI 路由。
 
-因此：**每新增一个后端 API（新建 router 或路由）后，必须同步在 `interfaces` 表插入一条记录**，否则控制台里看不到，也无法被调度/定时任务选中。
+1. 在 `server/routers/` 写路由，并在 `main.py` `include_router`
+2. 在 [`scripts/setup.py`](scripts/setup.py) 的 `builtins` 按 path 幂等追加
+3. 执行 `python scripts/setup.py`（本地或部署时会跑）
+4. 确认控制台「调度任务」能看到
 
-推荐做法（按 path 幂等，避免重复插入）：
+当前 builtins：
 
-1. 在 [`scripts/setup.py`](scripts/setup.py) 的 `builtins` 列表追加一条，例如：
+| 名称 | Method | Path | body_type |
+|------|--------|------|-----------|
+| Ozon FBO 发货 | POST | `/service/zyx/ozon/fahuo` | json |
+| 钉钉钉盘上传 | POST | `/service/zyx/dingtalk/dingpan/upload` | json |
+| 聚水潭获取Token | GET | `/service/zyx/jst/gettoken` | none |
+| 聚水潭查询商品资料 | GET | `/service/zyx/jst/sku/query` | none |
+| 聚水潭查询订单详情 | GET | `/service/zyx/jst/order/query` | none |
+| 聚水潭查询商品库存 | POST | `/service/zyx/jst/inventory/query` | json |
 
-```python
-(
-    "Ozon FBO 发货",
-    "读取今日待发货登记并自动申请 Ozon 供货单",
-    "POST",
-    "/service/zyx/ozon/fahuo",
-    "json",
-),
-```
+内部路径（以 `/` 开头）：执行时转发到 `INTERNAL_API_BASE`（默认 `http://127.0.0.1:{PORT}`；生产一般为 8800）。
 
-2. 执行 `python scripts/setup.py`（本地或服务器 deploy 时都会跑）
+调度弹窗参数：在 [`client/js/pages/dispatch.js`](client/js/pages/dispatch.js) 的 `API_PARAMS` 按 path 配置输入框；无参接口不显示输入框。
 
-字段说明（`interfaces`）：
+## 环境变量（摘要）
 
-| 字段 | 说明 |
+详见 [`.env.example`](.env.example)。
+
+| 类别 | 变量 |
 |------|------|
-| `project_id` | 默认项目，一般为 `1` |
-| `name` | 控制台显示名称 |
-| `description` | 简要说明 |
-| `method` | `GET` / `POST` / `PUT` / `DELETE` 等 |
-| `path` | 相对路径如 `/service/zyx/ozon/fahuo`，或完整外部 URL |
-| `body_type` | `none` / `json`（POST 且走 JSON body 时用 `json`） |
-| `status` | 固定 `published` |
-
-**内部路径**（以 `/service/` 开头）：调度执行时由 [`server/routers/apis.py`](server/routers/apis.py) 转发到本机 `http://127.0.0.1:8800`。全站免 JWT，影刀等外部系统可直接 POST，无需 Headers。
-
-**影刀调用 Ozon 发货（推荐同步 `wait=true`）：**
-
-- POST `https://www.ywzhaoran.xyz/service/zyx/ozon/fahuo`
-- 协议头：`Content-Type: application/json`
-- 协议体：`{"wait": true}`
-- 成功唯一ID 列表：响应 JSON 的 `data.success`（字符串数组）
-- 钉盘文件 ID 列表：响应 JSON 的 `data.file_ids`（每个发货包压缩上传钉盘后的 fileId；未上传或失败时为空数组）
-- `run_status`：`success` 全成功 / `partial` 部分成功 / `failed` 全失败 / `skipped` 未执行（如无当天数据）
-- `executed=false` 时看 `reason` 了解未执行原因
-- HTTP 始终 200，`code` 始终 0；部分成功用 `run_status: partial` 区分
-
-异步模式：协议体 `{}` 或 `{"wait": false}` → 取 `data.job_id` → GET `/ozon/fahuo/status/{job_id}` 直到 `job_status=done`
-
-**长耗时说明：** 有数据时发货+压缩+钉盘上传可能超过 1 分钟。`wait: true` 经 Nginx 需 `proxy_read_timeout` ≥ 1800s（见 `deploy/nginx-domain-service-zyx.conf`）。若仍超时，可改用异步 `wait: false` 并轮询 status。
-
-**检查清单（每次新增 API）：**
-
-- [ ] FastAPI 路由已注册（`server/routers/` + `main.py`）
-- [ ] `interfaces` 表已插入对应记录（`setup.py` builtins 或手动 SQL）
-- [ ] 已执行 `python scripts/setup.py` 或服务器 `deploy.sh`
-- [ ] 控制台「调度任务 / 定时任务」下拉中能看到该接口
+| 服务 | `PORT` |
+| MySQL | `DB_HOST` `DB_PORT` `DB_NAME` `DB_USER` `DB_PASS` |
+| Ozon | `OZON_ARCHIVE_ROOT` `OZON_SHOP_DATA` `OZON_UPLOAD_DINGPAN` … |
+| 钉盘 | `DINGTALK_APP_KEY` `DINGTALK_APP_SECRET` `DINGTALK_UNION_ID` `DINGTALK_DEFAULT_FOLDER_URL` … |
+| 聚水潭 | `JUSHUITAN_APP_KEY` `JUSHUITAN_APP_SECRET` `JUSHUITAN_AUTH_CODE` `JUSHUITAN_TOKEN_FILE` |
 
 ## 约定
 
-- API 统一返回 `{ "code": 0, "data": ... }` 成功，`{ "code": xxx, "detail": "..." }` 失败（FastAPI 风格）
-- 密码使用 pbkdf2_hmac(sha512) 哈希
-- 前端文件用 `.js` 扩展名，纯 `React.createElement` 编写
-- import map 通过 esm.sh CDN 加载所有依赖
+- 成功响应：`{ "code": 0, "data": ... }`；错误走 FastAPI `detail`
+- 密码：pbkdf2_hmac(sha512)，`salt:hex`
+- 前端页面用 `.js` + Vue SFC 风格 `template` 字符串；依赖走 esm.sh
+- `client/js/components/`、`auth.js` 等遗留 React 文件勿再扩展；以 `app.js` + `pages/` 为准

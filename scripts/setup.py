@@ -107,6 +107,13 @@ async def setup():
             "/service/zyx/jst/order/query",
             "none",
         ),
+        (
+            "聚水潭查询商品库存",
+            "按 SKU + 分仓编号列表查询库存，返回 /open/inventory/query 原始字段",
+            "POST",
+            "/service/zyx/jst/inventory/query",
+            "json",
+        ),
     ]
     for name, desc, method, path, body_type in builtins:
         exists = await execute_one(
