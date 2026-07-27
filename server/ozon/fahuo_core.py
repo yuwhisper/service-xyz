@@ -526,7 +526,7 @@ def mark_batch_applied(ship_date, shop, cluster, batch_no, order_id, db_config=N
 
 # ==================== 通用抗频限请求核心 ====================
 def ozon_post(
-    url, headers, payload, proxies=None, max_retries=5, initial_delay=2
+    url, headers, payload, proxies=None, max_retries=10, initial_delay=2
 ):
     """带自动重试机制的请求器，专门应对 Ozon 的 429 频限拦截"""
     retry_delay = initial_delay
@@ -561,7 +561,7 @@ def ozon_download_binary(
     url,
     headers,
     proxies=None,
-    max_retries=5,
+    max_retries=10,
     initial_delay=2,
     method="GET",
     json_body=None,
