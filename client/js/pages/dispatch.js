@@ -19,6 +19,13 @@ const API_PARAMS = {
     { key: 'save_name', label: 'save_name（钉盘保存名）', type: 'text' },
     { key: 'folder_url', label: 'folder_url（钉盘文件夹链接）', type: 'text' },
   ],
+  '/service/zyx/dingtalk/workbook/write': [
+    { key: 'user_id', label: 'user_id（操作人 userid）', type: 'text' },
+    { key: 'workbook_id', label: 'workbook_id（文档ID）', type: 'text' },
+    { key: 'sheet_id', label: 'sheet_id（工作表名）', type: 'text' },
+    { key: 'range_address', label: 'range_address（如 A2）', type: 'text' },
+    { key: 'values', label: 'values（二维JSON，如[["a","b"]]）', type: 'json' },
+  ],
 };
 
 export default {
@@ -136,7 +143,12 @@ export default {
           continue;
         }
         const text = (v == null ? '' : String(v)).trim();
-        if (text) out[f.key] = text;
+        if (!text) continue;
+        if (f.type === 'json') {
+          out[f.key] = JSON.parse(text);
+          continue;
+        }
+        out[f.key] = text;
       }
       return out;
     }

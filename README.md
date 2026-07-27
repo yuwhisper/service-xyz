@@ -3,7 +3,7 @@
 接口管理后台 + 业务 API（FastAPI + Vue 3 CDN，零构建）。
 
 - 控制台：数据中心 / 调度任务 / 定时任务
-- 内置：Ozon FBO 发货、钉钉钉盘上传、聚水潭 Token / SKU / 订单 / 库存查询
+- 内置：Ozon FBO 发货、钉钉钉盘上传 / 在线表写入、聚水潭 Token / SKU / 订单 / 库存查询
 - 全站业务 API **免 JWT**，可供影刀等直接调用
 
 ## 本地开发
@@ -50,6 +50,7 @@ bash /opt/service-zyx/deploy/deploy.sh
 | POST | `/ozon/fahuo` | Ozon FBO 发货（`wait: true` 同步） |
 | GET | `/ozon/fahuo/status/{job_id}` | 发货任务状态 |
 | POST | `/dingtalk/dingpan/upload` | 钉盘上传 |
+| POST | `/dingtalk/workbook/write` | 钉钉在线表写入 |
 | GET/POST | `/jst/gettoken` | 聚水潭 Token |
 | GET/POST | `/jst/sku/query` | 按 SKU 查商品（原始字段） |
 | GET/POST | `/jst/order/query` | 按 `o_id` / `so_id` 查订单（原始数据） |

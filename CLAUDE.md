@@ -3,7 +3,7 @@
 **Service XYZ** — 接口管理后台 + 业务 API 网关。
 
 - 控制台：按影刀风格管理/调试/调度 HTTP 接口，查看执行日志
-- 内置业务：Ozon FBO 发货、钉钉钉盘上传、聚水潭 Token / SKU / 订单 / 库存查询
+- 内置业务：Ozon FBO 发货、钉钉钉盘上传 / 在线表写入、聚水潭 Token / SKU / 订单 / 库存查询
 - 全站 API **免 JWT**，影刀等外部系统可直接调用
 
 ## 沟通方式
@@ -54,11 +54,11 @@ service-xyz/
 │   │   ├── apis.py              # interfaces CRUD / 执行 / 日志
 │   │   ├── schedules.py         # 定时任务 CRUD
 │   │   ├── ozon.py              # Ozon FBO 发货
-│   │   ├── dingtalk.py          # 钉盘上传
+│   │   ├── dingtalk.py          # 钉盘上传 / 在线表写入
 │   │   └── jst.py               # 聚水潭 token / SKU / 订单 / 库存
 │   ├── ozon/                    # fahuo_core + fahuo_runner
 │   ├── jushuitan/               # OpenAPI client + token 缓存
-│   └── dingtalk/                # 钉盘上传实现
+│   └── dingtalk/                # 钉盘上传 + 在线表写入实现
 ├── client/                      # Vue 3 SPA（纯静态）
 │   ├── index.html               # import map 入口
 │   ├── css/app.css
@@ -142,6 +142,7 @@ python server/main.py
 | POST | `/ozon/fahuo` | Ozon FBO 发货；`wait=true` 同步 / 默认异步返回 `job_id` |
 | GET | `/ozon/fahuo/status/{job_id}` | 发货任务状态 |
 | POST | `/dingtalk/dingpan/upload` | 上传本地文件/目录到钉盘 |
+| POST | `/dingtalk/workbook/write` | 写入钉钉在线表格单元格区域 |
 | GET/POST | `/jst/gettoken` | 聚水潭 access_token（`code` / `force`） |
 | GET/POST | `/jst/sku/query` | 按 `sku` 查商品资料，返回原始字段 |
 | GET/POST | `/jst/order/query` | 按 `o_id` 或 `so_id` 查订单，返回原始 data |
@@ -171,11 +172,12 @@ Content-Type: application/json
 - 异步：`{"wait": false}` → 轮询 `/ozon/fahuo/status/{job_id}`
 - Nginx 对 `/service/zyx/ozon` 建议 `proxy_read_timeout` ≥ 1800s
 
-### 钉钉钉盘（`server/dingtalk/`）
+### 钉钉（`server/dingtalk/`）
 
-- 凭证：`DINGTALK_APP_KEY` / `SECRET` / `UNION_ID`
-- 默认文件夹：`DINGTALK_DEFAULT_FOLDER_URL`（请求可传 `dingpan_folder_url` 覆盖）
+- 凭证：`DINGTALK_APP_KEY` / `SECRET`（钉盘另需 `UNION_ID`）
+- 钉盘默认文件夹：`DINGTALK_DEFAULT_FOLDER_URL`（请求可传 `dingpan_folder_url` 覆盖）
 - 上传路径白名单：`DINGTALK_UPLOAD_ALLOW_ROOTS`
+- 在线表写入：`POST /dingtalk/workbook/write`，body 传 `user_id` / `workbook_id` / `sheet_id` / `range_address` / `values`；服务端用 userid 换 unionId 后写表；成功 `code` 仅为 `0`，失败走 HTTP + `detail`
 
 ### 聚水潭（`server/jushuitan/`）
 
@@ -210,6 +212,7 @@ Content-Type: application/json
 |------|--------|------|-----------|
 | Ozon FBO 发货 | POST | `/service/zyx/ozon/fahuo` | json |
 | 钉钉钉盘上传 | POST | `/service/zyx/dingtalk/dingpan/upload` | json |
+| 钉钉在线表写入 | POST | `/service/zyx/dingtalk/workbook/write` | json |
 | 聚水潭获取Token | GET | `/service/zyx/jst/gettoken` | none |
 | 聚水潭查询商品资料 | GET | `/service/zyx/jst/sku/query` | none |
 | 聚水潭查询订单详情 | GET | `/service/zyx/jst/order/query` | none |

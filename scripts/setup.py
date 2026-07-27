@@ -87,6 +87,13 @@ async def setup():
             "json",
         ),
         (
+            "钉钉在线表写入",
+            "按起始单元格写入钉钉在线表格二维内容",
+            "POST",
+            "/service/zyx/dingtalk/workbook/write",
+            "json",
+        ),
+        (
             "聚水潭获取Token",
             "获取或刷新聚水潭 OpenAPI access_token",
             "GET",
