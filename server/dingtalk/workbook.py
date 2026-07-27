@@ -1,4 +1,4 @@
-"""DingTalk online workbook — update cell ranges."""
+"""DingTalk online workbook — read sheet props / update cell ranges."""
 from __future__ import annotations
 
 import os
@@ -114,6 +114,69 @@ class DingTalkWorkbookWriter:
         self._operator_cache[uid] = union_id
         return union_id
 
+    def get_sheet(
+        self,
+        *,
+        user_id: str,
+        workbook_id: str,
+        sheet_id: str,
+    ) -> dict[str, Any]:
+        wb = (workbook_id or "").strip()
+        sh = (sheet_id or "").strip()
+        if not wb:
+            raise ValueError("workbook_id 不能为空")
+        if not sh:
+            raise ValueError("sheet_id 不能为空")
+
+        operator_id = self.get_operator_id(user_id)
+        url = (
+            f"https://api.dingtalk.com/v1.0/doc/workbooks/"
+            f"{quote(str(wb), safe='')}/sheets/{quote(str(sh), safe='')}"
+        )
+        resp = requests.get(
+            url,
+            params={"operatorId": operator_id},
+            headers={
+                "x-acs-dingtalk-access-token": self.get_access_token(),
+                "Content-Type": "application/json",
+            },
+            timeout=30,
+        )
+        if resp.status_code >= 400:
+            raise RuntimeError(f"获取工作表属性失败 [{resp.status_code}]: {resp.text}")
+        return resp.json()
+
+    def get_last_row(
+        self,
+        *,
+        user_id: str,
+        workbook_id: str,
+        sheet_id: str,
+    ) -> dict[str, Any]:
+        sheet = self.get_sheet(
+            user_id=user_id,
+            workbook_id=workbook_id,
+            sheet_id=sheet_id,
+        )
+        last_non_empty = int(sheet.get("lastNonEmptyRow", -1))
+        if last_non_empty < 0:
+            last_excel_row = 0
+            next_excel_row = 1
+        else:
+            last_excel_row = last_non_empty + 1
+            next_excel_row = last_non_empty + 2
+
+        return {
+            "id": sheet.get("id"),
+            "name": sheet.get("name"),
+            "lastNonEmptyRow": last_non_empty,
+            "lastNonEmptyColumn": sheet.get("lastNonEmptyColumn"),
+            "rowCount": sheet.get("rowCount"),
+            "columnCount": sheet.get("columnCount"),
+            "last_excel_row": last_excel_row,
+            "next_excel_row": next_excel_row,
+        }
+
     def update_range(
         self,
         *,
@@ -153,6 +216,20 @@ class DingTalkWorkbookWriter:
                 f"写入表格失败 [{resp.status_code}] range={resolved}: {resp.text}"
             )
         return resp.json()
+
+
+def get_last_row(
+    *,
+    user_id: str,
+    workbook_id: str,
+    sheet_id: str,
+) -> dict[str, Any]:
+    """Return last non-empty row info and next writable Excel row."""
+    return DingTalkWorkbookWriter().get_last_row(
+        user_id=user_id,
+        workbook_id=workbook_id,
+        sheet_id=sheet_id,
+    )
 
 
 def write_cells(

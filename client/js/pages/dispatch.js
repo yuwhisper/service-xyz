@@ -26,6 +26,11 @@ const API_PARAMS = {
     { key: 'range_address', label: 'range_address（如 A2）', type: 'text' },
     { key: 'values', label: 'values（二维JSON，如[["a","b"]]）', type: 'json' },
   ],
+  '/service/zyx/dingtalk/workbook/last-row': [
+    { key: 'user_id', label: 'user_id（操作人 userid）', type: 'text' },
+    { key: 'workbook_id', label: 'workbook_id（文档ID）', type: 'text' },
+    { key: 'sheet_id', label: 'sheet_id（工作表名）', type: 'text' },
+  ],
 };
 
 export default {

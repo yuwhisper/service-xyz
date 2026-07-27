@@ -143,6 +143,7 @@ python server/main.py
 | GET | `/ozon/fahuo/status/{job_id}` | 发货任务状态 |
 | POST | `/dingtalk/dingpan/upload` | 上传本地文件/目录到钉盘 |
 | POST | `/dingtalk/workbook/write` | 写入钉钉在线表格单元格区域 |
+| POST | `/dingtalk/workbook/last-row` | 获取工作表最后非空行 / 下一行可写位置 |
 | GET/POST | `/jst/gettoken` | 聚水潭 access_token（`code` / `force`） |
 | GET/POST | `/jst/sku/query` | 按 `sku` 查商品资料，返回原始字段 |
 | GET/POST | `/jst/order/query` | 按 `o_id` 或 `so_id` 查订单，返回原始 data |
@@ -178,6 +179,7 @@ Content-Type: application/json
 - 钉盘默认文件夹：`DINGTALK_DEFAULT_FOLDER_URL`（请求可传 `dingpan_folder_url` 覆盖）
 - 上传路径白名单：`DINGTALK_UPLOAD_ALLOW_ROOTS`
 - 在线表写入：`POST /dingtalk/workbook/write`，body 传 `user_id` / `workbook_id` / `sheet_id` / `range_address` / `values`；服务端用 userid 换 unionId 后写表；成功 `code` 仅为 `0`，失败走 HTTP + `detail`
+- 在线表最后一行：`POST /dingtalk/workbook/last-row`，body 传 `user_id` / `workbook_id` / `sheet_id`；返回 `lastNonEmptyRow`、`last_excel_row`、`next_excel_row`（写入可用 `A{next_excel_row}`）
 
 ### 聚水潭（`server/jushuitan/`）
 
@@ -213,6 +215,7 @@ Content-Type: application/json
 | Ozon FBO 发货 | POST | `/service/zyx/ozon/fahuo` | json |
 | 钉钉钉盘上传 | POST | `/service/zyx/dingtalk/dingpan/upload` | json |
 | 钉钉在线表写入 | POST | `/service/zyx/dingtalk/workbook/write` | json |
+| 钉钉在线表最后一行 | POST | `/service/zyx/dingtalk/workbook/last-row` | json |
 | 聚水潭获取Token | GET | `/service/zyx/jst/gettoken` | none |
 | 聚水潭查询商品资料 | GET | `/service/zyx/jst/sku/query` | none |
 | 聚水潭查询订单详情 | GET | `/service/zyx/jst/order/query` | none |

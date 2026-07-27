@@ -94,6 +94,13 @@ async def setup():
             "json",
         ),
         (
+            "钉钉在线表最后一行",
+            "获取工作表最后非空行及下一行可写位置",
+            "POST",
+            "/service/zyx/dingtalk/workbook/last-row",
+            "json",
+        ),
+        (
             "聚水潭获取Token",
             "获取或刷新聚水潭 OpenAPI access_token",
             "GET",

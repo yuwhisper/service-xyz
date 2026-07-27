@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from server.dingtalk.dingpan import upload_directory_as_zip, upload_file
-from server.dingtalk.workbook import write_cells
+from server.dingtalk.workbook import get_last_row, write_cells
 
 router = APIRouter(prefix="/service/zyx/dingtalk", tags=["dingtalk"])
 
@@ -71,6 +71,20 @@ async def dingpan_upload(body: DingpanUploadBody):
         raise HTTPException(500, str(e)) from e
 
 
+class WorkbookLastRowBody(BaseModel):
+    user_id: str = Field(..., description="操作人 userid，服务端会换取 unionId")
+    workbook_id: str = Field(..., description="表格文件 ID（文档ID / nodeId）")
+    sheet_id: str = Field(..., description="工作表名称或 ID")
+
+    @field_validator("user_id", "workbook_id", "sheet_id")
+    @classmethod
+    def _strip_required(cls, v: str) -> str:
+        text = (v or "").strip()
+        if not text:
+            raise ValueError("不能为空")
+        return text
+
+
 @router.post("/workbook/write")
 async def workbook_write(body: WorkbookWriteBody):
     try:
@@ -80,6 +94,21 @@ async def workbook_write(body: WorkbookWriteBody):
             sheet_id=body.sheet_id,
             range_address=body.range_address,
             values=body.values,
+        )
+        return {"code": 0, "data": data}
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    except Exception as e:
+        raise HTTPException(500, str(e)) from e
+
+
+@router.post("/workbook/last-row")
+async def workbook_last_row(body: WorkbookLastRowBody):
+    try:
+        data = get_last_row(
+            user_id=body.user_id,
+            workbook_id=body.workbook_id,
+            sheet_id=body.sheet_id,
         )
         return {"code": 0, "data": data}
     except ValueError as e:

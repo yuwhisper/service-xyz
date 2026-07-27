@@ -51,6 +51,7 @@ bash /opt/service-zyx/deploy/deploy.sh
 | GET | `/ozon/fahuo/status/{job_id}` | 发货任务状态 |
 | POST | `/dingtalk/dingpan/upload` | 钉盘上传 |
 | POST | `/dingtalk/workbook/write` | 钉钉在线表写入 |
+| POST | `/dingtalk/workbook/last-row` | 钉钉在线表最后一行 |
 | GET/POST | `/jst/gettoken` | 聚水潭 Token |
 | GET/POST | `/jst/sku/query` | 按 SKU 查商品（原始字段） |
 | GET/POST | `/jst/order/query` | 按 `o_id` / `so_id` 查订单（原始数据） |
