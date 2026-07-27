@@ -107,11 +107,21 @@ tbody tr:hover{background:#fafbfc}
 /* ====== Modal ====== */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:1000;animation:modal-in .15s ease}
 .modal-box{background:var(--c-white);border-radius:var(--radius-xl);padding:28px 32px;width:90%;max-width:560px;max-height:85vh;overflow-y:auto;box-shadow:var(--shadow-lg);animation:modal-up .2s ease}
+.modal-box-wide{max-width:760px}
 .modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px}
 .modal-header h2{font-size:17px;font-weight:700;letter-spacing:-.2px}
 .modal-close{width:32px;height:32px;border-radius:50%;border:none;background:transparent;cursor:pointer;font-size:18px;color:var(--c-sub);display:flex;align-items:center;justify-content:center;transition:all var(--transition)}
 .modal-close:hover{background:#f2f3f5;color:var(--c-text)}
 .modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:22px}
+.api-docs-section{margin-bottom:20px}
+.api-docs-section:last-child{margin-bottom:0}
+.api-docs-title{font-size:13px;font-weight:600;color:var(--c-text);margin-bottom:8px}
+.api-docs-path{font-family:monospace;font-size:12px;color:var(--c-sub);margin-bottom:16px;word-break:break-all}
+.api-docs-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+.api-docs-table th,.api-docs-table td{padding:8px 10px;border:1px solid var(--c-border);text-align:left;vertical-align:top}
+.api-docs-table th{background:#fafbfc;color:var(--c-sub);font-weight:500;white-space:nowrap}
+.api-docs-table td.code{font-family:monospace;color:var(--c-blue);white-space:nowrap}
+.api-docs-empty{color:var(--c-sub);font-size:13px;padding:12px 0}
 @keyframes modal-in{from{opacity:0}to{opacity:1}}
 @keyframes modal-up{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
 

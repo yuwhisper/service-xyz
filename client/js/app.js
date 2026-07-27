@@ -47,11 +47,15 @@ const sidebar = {
 
 // ---- Modal ----
 const modalBox = {
-  props: ['title', 'visible'],
+  props: {
+    title: String,
+    visible: Boolean,
+    wide: { type: Boolean, default: false },
+  },
   emits: ['close'],
   template: `
   <div v-if="visible" class="modal-overlay" @click.self="$emit('close')">
-    <div class="modal-box">
+    <div class="modal-box" :class="{ 'modal-box-wide': wide }">
       <div class="modal-header">
         <h2>{{title}}</h2>
         <button class="modal-close" @click="$emit('close')">✕</button>
