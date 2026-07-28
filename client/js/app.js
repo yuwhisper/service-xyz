@@ -10,7 +10,8 @@ const loading = ref(false);
 const pages = { dashboard: Dashboard };
 async function loadPage(name) {
   if (pages[name]) return pages[name];
-  const m = await import(`./pages/${name}.js`);
+  // 版本参数避免浏览器长期缓存旧页面模块（如接口参数文档）
+  const m = await import(`./pages/${name}.js?v=20260728b`);
   pages[name] = m.default;
   return m.default;
 }

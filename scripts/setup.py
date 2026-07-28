@@ -141,6 +141,13 @@ async def setup():
                 (pid, name, desc, method, path, body_type),
             )
             print(f"[setup] Registered builtin API: {name}")
+        else:
+            await execute_insert(
+                "UPDATE interfaces SET name=%s, description=%s, method=%s, body_type=%s "
+                "WHERE project_id=%s AND path=%s",
+                (name, desc, method, body_type, pid, path),
+            )
+            print(f"[setup] Updated builtin API: {name}")
 
     print("[setup] Done!")
 
