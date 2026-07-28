@@ -149,6 +149,7 @@ python server/main.py
 | GET/POST | `/jst/sku/query` | 按 `sku` 查商品资料，返回原始字段 |
 | GET/POST | `/jst/order/query` | 订单查询：`o_ids`/`so_ids`/时间窗/`start_ts`/状态等可选；`order_flds`/`order_item_flds` 拆成独立布尔参数 |
 | GET/POST | `/jst/inventory/query` | 按 `sku` + `wms_co_ids` 查分仓库存 |
+| GET/POST | `/jst/lwh/query` | 按中文虚拟仓名精确匹配，返回 `{ lwh_id }` |
 
 ## 内置业务模块
 
@@ -182,12 +183,14 @@ Content-Type: application/json
 - 在线表写入：`POST /dingtalk/workbook/write`，body 传 `user_id` / `workbook_id` / `sheet_id` / `range_address` / `values`；服务端用 userid 换 unionId 后写表；成功 `code` 仅为 `0`，失败走 HTTP + `detail`
 - 在线表最后一行：`POST /dingtalk/workbook/last-row`，body 传 `user_id` / `workbook_id` / `sheet_id`；返回 `lastNonEmptyRow`、`last_excel_row`、`next_excel_row`（写入可用 `A{next_excel_row}`）
 - AI 多维表写入：`POST /dingtalk/notable/records`，body 传 `user_id` / `base_id` / `sheet_id` / `records`；`sheet_id` 为左侧数据表名（不是视图页签）；需权限 `Notable.Base.Write.All`
+- AI 多维表附件：`POST /dingtalk/notable/upload-attachment`（本地路径）或 `POST /dingtalk/notable/upload-attachment-file`（multipart）；返回 `{filename,size,type,url,resourceId}`，写入附件列时值为该对象的数组
 
 ### 聚水潭（`server/jushuitan/`）
 
 - Token 与 `/jst/gettoken` 共用 `get_access_token()` 缓存（`.jst_tokens.json`）
 - SKU / 订单 / 库存接口返回聚水潭原始字段，不做翻译或二次加工
 - 库存：`POST /jst/inventory/query`，body `{ "sku": "...", "wms_co_ids": [分仓编号, ...] }`；空列表表示所有仓总库存
+- 虚拟仓：`POST /jst/lwh/query`，body `{ "name": "TEMU仓" }` → `{ "code": 0, "data": { "lwh_id": ... } }`
 
 ## 数据库
 
@@ -223,6 +226,7 @@ Content-Type: application/json
 | 聚水潭查询商品资料 | GET | `/service/zyx/jst/sku/query` | none |
 | 聚水潭查询订单详情 | GET | `/service/zyx/jst/order/query` | none |
 | 聚水潭查询商品库存 | POST | `/service/zyx/jst/inventory/query` | json |
+| 聚水潭按名称查虚拟仓ID | POST | `/service/zyx/jst/lwh/query` | json |
 
 内部路径（以 `/` 开头）：执行时转发到 `INTERNAL_API_BASE`（默认 `http://127.0.0.1:{PORT}`；生产一般为 8800）。
 

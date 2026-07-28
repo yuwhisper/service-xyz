@@ -21,6 +21,7 @@ from server.jushuitan.config import (
     REFRESH_TOKEN_PATH,
     SKU_QUERY_BATCH_SIZE,
     SKU_QUERY_PATH,
+    WAREHOUSE_LIST_PATH,
 )
 from server.jushuitan.token_store import load_tokens, save_tokens
 
@@ -475,3 +476,35 @@ def query_inventory_by_sku(
         results.append(item)
 
     return results
+
+
+def list_lock_warehouses() -> list[dict[str, Any]]:
+    """Call getwarehouselist; return list of virtual warehouse dicts."""
+    data = _post_biz(WAREHOUSE_LIST_PATH, {})
+    warehouses = data.get("data") or []
+    if not isinstance(warehouses, list):
+        raise RuntimeError(f"虚拟仓列表格式异常: {warehouses!r}")
+    return warehouses
+
+
+def get_lwh_id_by_name(name: str) -> Any:
+    """
+    Resolve Chinese virtual warehouse name to lwh_id (exact match on name).
+    Raises ValueError if empty / not found / duplicate.
+    """
+    text = (name or "").strip()
+    if not text:
+        raise ValueError("name 不能为空")
+
+    warehouses = list_lock_warehouses()
+    matched = [
+        wh for wh in warehouses if str(wh.get("name") or "").strip() == text
+    ]
+    if not matched:
+        names = [str(wh.get("name") or "") for wh in warehouses[:30]]
+        raise ValueError(f"未找到虚拟仓「{text}」。前若干名称示例: {names}")
+    if len(matched) > 1:
+        ids = [wh.get("lwh_id") for wh in matched]
+        raise ValueError(f"虚拟仓「{text}」匹配到多条: {ids}")
+
+    return matched[0].get("lwh_id")

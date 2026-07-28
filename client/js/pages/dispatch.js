@@ -39,6 +39,9 @@ const API_PARAMS = {
     { key: 'sku', label: 'sku（商品编码）', type: 'text' },
     { key: 'wms_co_ids', label: 'wms_co_ids（分仓编号，JSON数组如[15774928]）', type: 'text' },
   ],
+  '/service/zyx/jst/lwh/query': [
+    { key: 'name', label: 'name（虚拟仓中文名）', type: 'text' },
+  ],
   '/service/zyx/dingtalk/dingpan/upload': [
     { key: 'local_path', label: 'local_path（服务器本地路径）', type: 'text' },
     { key: 'as_zip', label: 'as_zip（目录先压缩）', type: 'bool' },
@@ -62,6 +65,16 @@ const API_PARAMS = {
     { key: 'base_id', label: 'base_id（AI多维表文档ID）', type: 'text' },
     { key: 'sheet_id', label: 'sheet_id（数据表名，如数据表）', type: 'text' },
     { key: 'records', label: 'records（JSON数组，如[{"店铺名":"1688-01"}]）', type: 'json' },
+  ],
+  '/service/zyx/dingtalk/notable/upload-attachment': [
+    { key: 'user_id', label: 'user_id', type: 'text' },
+    { key: 'base_id', label: 'base_id', type: 'text' },
+    { key: 'file_path', label: 'file_path', type: 'text' },
+  ],
+  '/service/zyx/dingtalk/notable/upload-attachment-file': [
+    { key: 'user_id', label: 'user_id', type: 'text' },
+    { key: 'base_id', label: 'base_id', type: 'text' },
+    { key: 'file', label: 'file', type: 'file' },
   ],
   '/service/zyx/ozon/fahuo': [
     { key: 'wait', label: 'wait（true=同步等待结果）', type: 'bool' },
@@ -131,6 +144,44 @@ const API_DOCS = {
       { key: 'data.value', desc: '成功新增的记录列表' },
       { key: 'data.value[].id', desc: '新建记录的 recordId' },
     ],
+  },
+  '/service/zyx/dingtalk/notable/upload-attachment': {
+    requestExample: {
+      user_id: '17605205775264779',
+      base_id: 'X6GRezwJlLr9OOrrfg0NjexAJdqbropQ',
+      file_path: '/opt/dlz/data/product-images/tax/xxx.jpg',
+    },
+    requestFields: [
+      { key: 'user_id', type: 'string', required: '是', desc: '操作人 userid' },
+      { key: 'base_id', type: 'string', required: '是', desc: 'AI 多维表文档 ID' },
+      { key: 'file_path', type: 'string', required: '是', desc: '服务器本地路径（须在 DINGTALK_UPLOAD_ALLOW_ROOTS 内）' },
+    ],
+    responseExample: {
+      code: 0,
+      data: {
+        filename: 'xxx.jpg',
+        size: 12345,
+        type: 'image/jpeg',
+        url: '/core/api/resources/img/...',
+        resourceId: 'uuid',
+      },
+    },
+    responseFields: [
+      { key: 'data', desc: '附件对象；写入记录时放到附件列，值为 [data]' },
+    ],
+  },
+  '/service/zyx/dingtalk/notable/upload-attachment-file': {
+    requestExample: { user_id: '...', base_id: '...', file: '(binary)' },
+    requestFields: [
+      { key: 'user_id', type: 'string', required: '是', desc: '操作人 userid' },
+      { key: 'base_id', type: 'string', required: '是', desc: 'AI 多维表文档 ID' },
+      { key: 'file', type: 'file', required: '是', desc: 'multipart 文件' },
+    ],
+    responseExample: {
+      code: 0,
+      data: { filename: 'a.jpg', size: 1, type: 'image/jpeg', url: '...', resourceId: '...' },
+    },
+    responseFields: [{ key: 'data', desc: '附件对象' }],
   },
   '/service/zyx/dingtalk/workbook/write': {
     requestExample: {
@@ -299,6 +350,20 @@ const API_DOCS = {
     responseFields: [
       { key: 'code', desc: '业务状态码，成功固定为 0' },
       { key: 'data', desc: '聚水潭库存查询原始返回数据' },
+    ],
+  },
+  '/service/zyx/jst/lwh/query': {
+    requestExample: { name: 'TEMU仓' },
+    requestFields: [
+      { key: 'name', type: 'string', required: '是', desc: '虚拟仓中文名，精确匹配聚水潭 name' },
+    ],
+    responseExample: {
+      code: 0,
+      data: { lwh_id: 818 },
+    },
+    responseFields: [
+      { key: 'code', desc: '业务状态码，成功固定为 0' },
+      { key: 'data.lwh_id', desc: '虚拟仓编号' },
     ],
   },
   '/service/zyx/ozon/fahuo': {

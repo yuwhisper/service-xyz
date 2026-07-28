@@ -108,6 +108,20 @@ async def setup():
             "json",
         ),
         (
+            "钉钉AI多维表上传附件(路径)",
+            "用服务器本地路径上传附件，返回附件字段对象",
+            "POST",
+            "/service/zyx/dingtalk/notable/upload-attachment",
+            "json",
+        ),
+        (
+            "钉钉AI多维表上传附件(文件)",
+            "multipart 上传附件到AI表格资源空间",
+            "POST",
+            "/service/zyx/dingtalk/notable/upload-attachment-file",
+            "multipart",
+        ),
+        (
             "聚水潭获取Token",
             "获取或刷新聚水潭 OpenAPI access_token",
             "GET",
@@ -133,6 +147,13 @@ async def setup():
             "按 SKU + 分仓编号列表查询库存，返回 /open/inventory/query 原始字段",
             "POST",
             "/service/zyx/jst/inventory/query",
+            "json",
+        ),
+        (
+            "聚水潭按名称查虚拟仓ID",
+            "按中文虚拟仓名精确匹配，返回 lwh_id",
+            "POST",
+            "/service/zyx/jst/lwh/query",
             "json",
         ),
     ]

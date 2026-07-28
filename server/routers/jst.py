@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from server.jushuitan.client import (
     fetch_token_info,
+    get_lwh_id_by_name,
     query_inventory_by_sku,
     query_order_raw,
     query_sku_raw,
@@ -123,6 +124,10 @@ class InventoryQueryBody(BaseModel):
         return _parse_list_value(value)
 
 
+class LwhQueryBody(BaseModel):
+    name: str = Field(..., description="虚拟仓中文名，精确匹配")
+
+
 @router.get("/gettoken")
 async def get_token_get(
     force: bool = Query(False, description="忽略缓存重新换取"),
@@ -200,6 +205,18 @@ async def query_inventory_post(body: InventoryQueryBody):
     )
 
 
+@router.get("/lwh/query")
+async def query_lwh_get(
+    name: str = Query(..., description="虚拟仓中文名，精确匹配"),
+):
+    return await _query_lwh(name)
+
+
+@router.post("/lwh/query")
+async def query_lwh_post(body: LwhQueryBody):
+    return await _query_lwh(body.name)
+
+
 def _get_token(*, force: bool, code: str | None):
     try:
         data = fetch_token_info(force=force, code=code)
@@ -271,6 +288,18 @@ async def _query_inventory(
                 "items": items,
             },
         }
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(502, str(e)) from e
+    except Exception as e:
+        raise HTTPException(500, str(e)) from e
+
+
+async def _query_lwh(name: str):
+    try:
+        lwh_id = await asyncio.to_thread(get_lwh_id_by_name, name)
+        return {"code": 0, "data": {"lwh_id": lwh_id}}
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
     except RuntimeError as e:
