@@ -146,7 +146,7 @@ python server/main.py
 | POST | `/dingtalk/workbook/last-row` | 获取工作表最后非空行 / 下一行可写位置 |
 | GET/POST | `/jst/gettoken` | 聚水潭 access_token（`code` / `force`） |
 | GET/POST | `/jst/sku/query` | 按 `sku` 查商品资料，返回原始字段 |
-| GET/POST | `/jst/order/query` | 按 `o_id` 或 `so_id` 查订单，返回原始 data |
+| GET/POST | `/jst/order/query` | 订单查询：`o_ids`/`so_ids`/时间窗/`start_ts`/状态等可选；`order_flds`/`order_item_flds` 拆成独立布尔参数 |
 | GET/POST | `/jst/inventory/query` | 按 `sku` + `wms_co_ids` 查分仓库存 |
 
 ## 内置业务模块

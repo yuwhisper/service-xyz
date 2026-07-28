@@ -54,7 +54,7 @@ bash /opt/service-zyx/deploy/deploy.sh
 | POST | `/dingtalk/workbook/last-row` | 钉钉在线表最后一行 |
 | GET/POST | `/jst/gettoken` | 聚水潭 Token |
 | GET/POST | `/jst/sku/query` | 按 SKU 查商品（原始字段） |
-| GET/POST | `/jst/order/query` | 按 `o_id` / `so_id` 查订单（原始数据） |
+| GET/POST | `/jst/order/query` | 订单查询（`o_ids`/`so_ids`/时间/`start_ts` 等可选；`volume` 等拆成独立布尔字段） |
 | GET/POST | `/jst/inventory/query` | 按 SKU + 分仓编号列表查库存 |
 | GET | `/dashboard/stats` | 概览统计 |
 | GET | `/dashboard/logs` | 执行日志（搜索 + 分页） |

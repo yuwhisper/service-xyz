@@ -15,6 +15,24 @@ from server.jushuitan.client import (
 router = APIRouter(prefix="/service/zyx/jst", tags=["jushuitan"])
 
 
+def _parse_list_value(value: Any) -> list[Any]:
+    if value is None or value == "":
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, (int, float)):
+        return [value]
+    text = str(value).strip()
+    if not text:
+        return []
+    if text.startswith("["):
+        parsed = json.loads(text)
+        if not isinstance(parsed, list):
+            raise ValueError("必须是 JSON 数组")
+        return parsed
+    return [x.strip() for x in text.split(",") if x.strip()]
+
+
 class GetTokenBody(BaseModel):
     code: str | None = Field(
         default=None,
@@ -31,8 +49,64 @@ class SkuQueryBody(BaseModel):
 
 
 class OrderQueryBody(BaseModel):
-    o_id: str | None = Field(default=None, description="聚水潭内部订单号")
-    so_id: str | None = Field(default=None, description="线上订单号")
+    # 单号（兼容旧字段 + 列表）
+    o_id: str | None = Field(default=None, description="内部订单号（单个，兼容旧参数）")
+    so_id: str | None = Field(default=None, description="线上订单号（单个，兼容旧参数）")
+    o_ids: list[Any] = Field(default_factory=list, description="内部订单号列表，最多20条")
+    so_ids: list[Any] = Field(default_factory=list, description="线上单号列表，最多20条")
+
+    shop_id: int | None = Field(default=None, description="店铺编号")
+    is_offline_shop: bool | None = Field(
+        default=None,
+        description="shop_id 为 0 且为 true 时查询线下店铺单据",
+    )
+    modified_begin: str | None = Field(default=None, description="起始时间")
+    modified_end: str | None = Field(default=None, description="结束时间")
+    date_type: int | None = Field(
+        default=None,
+        description="0修改时间 / 2订单日期 / 3发货时间，默认0",
+    )
+    status: str | None = Field(
+        default=None,
+        description="订单状态：WaitPay/Delivering/Merged/Question/Split/WaitOuterSent/WaitConfirm/WaitFConfirm/Sent/Cancelled",
+    )
+    page_index: int | None = Field(default=None, description="页码，从1开始")
+    page_size: int | None = Field(default=None, description="每页条数，最大100")
+    start_ts: int | None = Field(default=None, description="ts 时间戳增量查询（>=）")
+    is_get_total: bool | None = Field(
+        default=None,
+        description="是否查询总条数；start_ts 查询时建议 false",
+    )
+    order_types: list[Any] = Field(default_factory=list, description="订单类型列表")
+    archive: bool | None = Field(default=None, description="是否查询历史订单，默认 false")
+    is_get_cbfinance: bool | None = Field(
+        default=True,
+        description="是否获取跨境财务字段（兼容旧行为，默认 true）",
+    )
+
+    # order_flds：分开写，true 时加入自定义返回字段
+    volume: bool | None = Field(default=None, description="订单自定义字段：体积")
+    package: bool | None = Field(default=None, description="订单自定义字段：包材")
+    outer_drp_co_id: bool | None = Field(default=None, description="订单自定义字段：货主分销")
+    cus_id: bool | None = Field(default=None, description="订单自定义字段：货通客户id")
+    logistics_status: bool | None = Field(
+        default=None,
+        description="订单自定义字段：o2o配送状态",
+    )
+
+    # order_item_flds
+    src_combine_sku_qty: bool | None = Field(default=None, description="明细：原组合商品数量")
+    referrer_name: bool | None = Field(default=None, description="明细：达人名称")
+    presale_date: bool | None = Field(default=None, description="明细：预售时间")
+    drp_price: bool | None = Field(default=None, description="明细：采购价")
+    item_plan_delivery_date: bool | None = Field(default=None, description="明细：最晚发货时间")
+    activity_u_id: bool | None = Field(default=None, description="明细：团长id")
+    activity_u_name: bool | None = Field(default=None, description="明细：团长名称")
+
+    @field_validator("o_ids", "so_ids", "order_types", mode="before")
+    @classmethod
+    def _parse_lists(cls, value: Any) -> list[Any]:
+        return _parse_list_value(value)
 
 
 class InventoryQueryBody(BaseModel):
@@ -46,21 +120,7 @@ class InventoryQueryBody(BaseModel):
     @field_validator("wms_co_ids", mode="before")
     @classmethod
     def _parse_wms_co_ids(cls, value: Any) -> list[Any]:
-        if value is None or value == "":
-            return []
-        if isinstance(value, list):
-            return value
-        if isinstance(value, (int, float)):
-            return [int(value)]
-        text = str(value).strip()
-        if not text:
-            return []
-        if text.startswith("["):
-            parsed = json.loads(text)
-            if not isinstance(parsed, list):
-                raise ValueError("wms_co_ids JSON 必须是数组")
-            return parsed
-        return [x.strip() for x in text.split(",") if x.strip()]
+        return _parse_list_value(value)
 
 
 @router.get("/gettoken")
@@ -90,15 +150,32 @@ async def query_sku_post(body: SkuQueryBody):
 
 @router.get("/order/query")
 async def query_order_get(
-    o_id: str | None = Query(None, description="聚水潭内部订单号"),
+    o_id: str | None = Query(None, description="内部订单号"),
     so_id: str | None = Query(None, description="线上订单号"),
+    shop_id: int | None = Query(None, description="店铺编号"),
+    modified_begin: str | None = Query(None, description="起始时间"),
+    modified_end: str | None = Query(None, description="结束时间"),
+    status: str | None = Query(None, description="订单状态"),
+    page_index: int | None = Query(None, description="页码"),
+    page_size: int | None = Query(None, description="每页条数"),
+    start_ts: int | None = Query(None, description="ts 增量"),
 ):
-    return await _query_order(o_id=o_id, so_id=so_id)
+    return await _query_order(
+        o_id=o_id,
+        so_id=so_id,
+        shop_id=shop_id,
+        modified_begin=modified_begin,
+        modified_end=modified_end,
+        status=status,
+        page_index=page_index,
+        page_size=page_size,
+        start_ts=start_ts,
+    )
 
 
 @router.post("/order/query")
 async def query_order_post(body: OrderQueryBody):
-    return await _query_order(o_id=body.o_id, so_id=body.so_id)
+    return await _query_order(**body.model_dump())
 
 
 @router.get("/inventory/query")
@@ -157,9 +234,9 @@ async def _query_sku(sku: str):
         raise HTTPException(500, str(e)) from e
 
 
-async def _query_order(*, o_id: str | None, so_id: str | None):
+async def _query_order(**kwargs: Any):
     try:
-        data = await asyncio.to_thread(query_order_raw, o_id=o_id, so_id=so_id)
+        data = await asyncio.to_thread(query_order_raw, **kwargs)
         return {"code": 0, "data": data}
     except ValueError as e:
         raise HTTPException(400, str(e)) from e

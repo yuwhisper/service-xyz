@@ -286,19 +286,144 @@ def query_order_raw(
     *,
     o_id: str | None = None,
     so_id: str | None = None,
+    o_ids: list[Any] | None = None,
+    so_ids: list[Any] | None = None,
+    shop_id: int | None = None,
+    is_offline_shop: bool | None = None,
+    modified_begin: str | None = None,
+    modified_end: str | None = None,
+    date_type: int | None = None,
+    status: str | None = None,
+    page_index: int | None = None,
+    page_size: int | None = None,
+    start_ts: int | None = None,
+    is_get_total: bool | None = None,
+    order_types: list[Any] | None = None,
+    archive: bool | None = None,
+    is_get_cbfinance: bool | None = True,
+    # order_flds（分开传，true 时加入自定义查询字段）
+    volume: bool | None = None,
+    package: bool | None = None,
+    outer_drp_co_id: bool | None = None,
+    cus_id: bool | None = None,
+    logistics_status: bool | None = None,
+    # order_item_flds
+    src_combine_sku_qty: bool | None = None,
+    referrer_name: bool | None = None,
+    presale_date: bool | None = None,
+    drp_price: bool | None = None,
+    item_plan_delivery_date: bool | None = None,
+    activity_u_id: bool | None = None,
+    activity_u_name: bool | None = None,
 ) -> dict[str, Any]:
-    """Query one order via /open/orders/single/query; return raw data dict."""
-    o_text = (o_id or "").strip()
-    so_text = (so_id or "").strip()
-    if o_text:
-        biz_data: dict[str, Any] = {"o_ids": [o_text], "is_get_cbfinance": True}
-    elif so_text:
-        biz_data = {"so_ids": [so_text], "is_get_cbfinance": True}
-    else:
-        raise ValueError("o_id 或 so_id 至少传一个")
+    """Query orders via /open/orders/single/query; return raw data dict."""
+    oid_list = _normalize_str_list(o_ids)
+    soid_list = _normalize_str_list(so_ids)
+    if o_id and str(o_id).strip():
+        oid_list = list(dict.fromkeys(oid_list + [str(o_id).strip()]))
+    if so_id and str(so_id).strip():
+        soid_list = list(dict.fromkeys(soid_list + [str(so_id).strip()]))
+
+    begin = (modified_begin or "").strip()
+    end = (modified_end or "").strip()
+    has_time = bool(begin and end)
+    has_ts = start_ts is not None
+
+    if not oid_list and not soid_list and not has_time and not has_ts:
+        raise ValueError(
+            "o_ids/so_ids、modified_begin+modified_end、start_ts 不能同时为空"
+        )
+    if (begin and not end) or (end and not begin):
+        raise ValueError("modified_begin 与 modified_end 必须同时存在")
+
+    biz_data: dict[str, Any] = {}
+    if oid_list:
+        # 内部单号：尽量转 int（聚水潭文档为 number），失败则保留字符串
+        parsed_oids: list[Any] = []
+        for x in oid_list:
+            try:
+                parsed_oids.append(int(x))
+            except (TypeError, ValueError):
+                parsed_oids.append(x)
+        biz_data["o_ids"] = parsed_oids
+    if soid_list:
+        biz_data["so_ids"] = soid_list
+    if shop_id is not None:
+        biz_data["shop_id"] = int(shop_id)
+    if is_offline_shop is not None:
+        biz_data["is_offline_shop"] = bool(is_offline_shop)
+    if has_time:
+        biz_data["modified_begin"] = begin
+        biz_data["modified_end"] = end
+    if date_type is not None:
+        biz_data["date_type"] = int(date_type)
+    if status is not None and str(status).strip():
+        biz_data["status"] = str(status).strip()
+    if page_index is not None:
+        biz_data["page_index"] = int(page_index)
+    if page_size is not None:
+        biz_data["page_size"] = min(int(page_size), 100)
+    if has_ts:
+        biz_data["start_ts"] = int(start_ts)
+    if is_get_total is not None:
+        biz_data["is_get_total"] = bool(is_get_total)
+    elif has_ts:
+        # 文档：使用 start_ts 时建议传 false
+        biz_data["is_get_total"] = False
+    if order_types:
+        types = _normalize_str_list(order_types)
+        if types:
+            biz_data["order_types"] = types
+    if archive is not None:
+        biz_data["archive"] = bool(archive)
+    if is_get_cbfinance is not None:
+        biz_data["is_get_cbfinance"] = bool(is_get_cbfinance)
+
+    order_flds = [
+        name
+        for name, flag in (
+            ("volume", volume),
+            ("package", package),
+            ("outer_drp_co_id", outer_drp_co_id),
+            ("cus_id", cus_id),
+            ("logistics_status", logistics_status),
+        )
+        if flag
+    ]
+    if order_flds:
+        biz_data["order_flds"] = order_flds
+
+    order_item_flds = [
+        name
+        for name, flag in (
+            ("src_combine_sku_qty", src_combine_sku_qty),
+            ("referrer_name", referrer_name),
+            ("presale_date", presale_date),
+            ("drp_price", drp_price),
+            ("item_plan_delivery_date", item_plan_delivery_date),
+            ("activity_u_id", activity_u_id),
+            ("activity_u_name", activity_u_name),
+        )
+        if flag
+    ]
+    if order_item_flds:
+        biz_data["order_item_flds"] = order_item_flds
 
     data = _post_biz(ORDER_QUERY_PATH, biz_data)
     return data.get("data") or {}
+
+
+def _normalize_str_list(values: list[Any] | None) -> list[str]:
+    if not values:
+        return []
+    out: list[str] = []
+    for x in values:
+        if x is None:
+            continue
+        text = str(x).strip()
+        if text:
+            out.append(text)
+    return out
 
 
 def _normalize_wms_co_ids(wms_co_ids: list[Any] | None) -> list[int]:

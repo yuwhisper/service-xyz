@@ -116,10 +116,10 @@ async def setup():
         ),
         (
             "聚水潭查询订单详情",
-            "按内部单号或线上单号查询订单详情，返回 /open/orders/single/query 原始数据",
-            "GET",
+            "按内部/线上单号、时间、start_ts 等可选条件查订单；volume/package 等自定义字段单独传布尔，返回原始 data",
+            "POST",
             "/service/zyx/jst/order/query",
-            "none",
+            "json",
         ),
         (
             "聚水潭查询商品库存",
