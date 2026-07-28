@@ -156,6 +156,13 @@ async def setup():
             "/service/zyx/jst/lwh/query",
             "json",
         ),
+        (
+            "聚水潭创建虚拟仓调拨单",
+            "按中文仓名创建虚拟仓调拨；创建前校验调出/调入/实体仓/SKU/库存，失败返回详细中文",
+            "POST",
+            "/service/zyx/jst/lwh/allocation/create",
+            "json",
+        ),
     ]
     for name, desc, method, path, body_type in builtins:
         exists = await execute_one(

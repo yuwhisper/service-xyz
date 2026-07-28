@@ -58,6 +58,7 @@ bash /opt/service-zyx/deploy/deploy.sh
 | GET/POST | `/jst/order/query` | 订单查询（`o_ids`/`so_ids`/时间/`start_ts` 等可选；`volume` 等拆成独立布尔字段） |
 | GET/POST | `/jst/inventory/query` | 按 SKU + 分仓编号列表查库存 |
 | GET/POST | `/jst/lwh/query` | 按中文虚拟仓名查 `lwh_id` + `bind_wms`（含实体仓） |
+| POST | `/jst/lwh/allocation/create` | 创建虚拟仓调拨单（中文仓名；详细中文报错） |
 | GET | `/dashboard/stats` | 概览统计 |
 | GET | `/dashboard/logs` | 执行日志（搜索 + 分页） |
 | * | `/apis`、`/schedules` | 控制台接口定义与定时任务 |

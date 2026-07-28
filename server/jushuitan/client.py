@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import threading
 import time
+from datetime import datetime
 from typing import Any
 
 import requests
@@ -16,11 +18,13 @@ from server.jushuitan.config import (
     AUTH_CODE,
     INIT_TOKEN_PATH,
     INVENTORY_QUERY_PATH,
+    LWH_ALLOCATION_CREATE_PATH,
     OPENAPI_BASE,
     ORDER_QUERY_PATH,
     REFRESH_TOKEN_PATH,
     SKU_QUERY_BATCH_SIZE,
     SKU_QUERY_PATH,
+    TOKEN_FILE,
     WAREHOUSE_LIST_PATH,
 )
 from server.jushuitan.token_store import load_tokens, save_tokens
@@ -520,3 +524,264 @@ def get_lwh_by_name(name: str) -> dict[str, Any]:
 def get_lwh_id_by_name(name: str) -> Any:
     """Backward-compatible: return only lwh_id."""
     return get_lwh_by_name(name)["lwh_id"]
+
+
+def _as_int_or_none(value: Any) -> int | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.isdigit() or (text.startswith("-") and text[1:].isdigit()):
+        return int(text)
+    try:
+        num = float(text)
+        if num.is_integer():
+            return int(num)
+    except (TypeError, ValueError):
+        pass
+    return None
+
+
+def _bind_wms_list(warehouse: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not warehouse:
+        return []
+    binds = warehouse.get("bind_wms") or []
+    return binds if isinstance(binds, list) else []
+
+
+def _resolve_lwh(
+    name_or_id: Any,
+    warehouses: list[dict[str, Any]],
+    *,
+    label: str,
+    not_found_prefix: str,
+) -> tuple[Any, dict[str, Any] | None]:
+    if name_or_id is None or str(name_or_id).strip() == "":
+        raise ValueError(f"{label}不能为空")
+
+    as_id = _as_int_or_none(name_or_id)
+    if as_id is not None:
+        for wh in warehouses:
+            if wh.get("lwh_id") == as_id or str(wh.get("lwh_id")) == str(as_id):
+                return as_id, wh
+        names = [str(wh.get("name") or "") for wh in warehouses[:30]]
+        raise ValueError(
+            f"{not_found_prefix}「{name_or_id}」。前若干名称示例: {names}"
+        )
+
+    name = str(name_or_id).strip()
+    matched = [wh for wh in warehouses if str(wh.get("name") or "").strip() == name]
+    if not matched:
+        names = [str(wh.get("name") or "") for wh in warehouses[:30]]
+        raise ValueError(f"{not_found_prefix}「{name}」。前若干名称示例: {names}")
+    if len(matched) > 1:
+        ids = [wh.get("lwh_id") for wh in matched]
+        raise ValueError(f"{label}「{name}」匹配到多条: {ids}")
+    return matched[0].get("lwh_id"), matched[0]
+
+
+def _resolve_wms_co_id(
+    wms_value: Any,
+    out_wh: dict[str, Any] | None,
+    in_wh: dict[str, Any] | None,
+) -> int:
+    out_binds = _bind_wms_list(out_wh)
+    in_binds = _bind_wms_list(in_wh)
+    out_ids = {b.get("wms_co_id") for b in out_binds if b.get("wms_co_id") is not None}
+    in_ids = {b.get("wms_co_id") for b in in_binds if b.get("wms_co_id") is not None}
+    shared_ids = out_ids & in_ids if in_ids else out_ids
+    candidate_binds = [
+        b for b in out_binds if b.get("wms_co_id") in shared_ids
+    ] or out_binds or in_binds
+
+    if wms_value is None or str(wms_value).strip() == "":
+        if len(candidate_binds) == 1:
+            return int(candidate_binds[0].get("wms_co_id"))
+        names = [
+            f"{b.get('wms_name')}({b.get('wms_co_id')})" for b in candidate_binds
+        ]
+        raise ValueError(
+            f"实体仓有多个绑定，请填写 wms（中文名或 id）。候选: {names}"
+        )
+
+    as_id = _as_int_or_none(wms_value)
+    if as_id is not None:
+        return int(as_id)
+
+    name = str(wms_value).strip()
+    pool = list(out_binds)
+    for b in in_binds:
+        if b not in pool:
+            pool.append(b)
+    matched = [b for b in pool if str(b.get("wms_name") or "").strip() == name]
+    uniq: dict[Any, dict[str, Any]] = {}
+    for b in matched:
+        uniq[b.get("wms_co_id")] = b
+    matched = list(uniq.values())
+    if not matched:
+        names = [str(b.get("wms_name") or "") for b in pool]
+        raise ValueError(f"查不到实体仓「{name}」。候选 wms_name: {names}")
+    if len(matched) > 1:
+        ids = [b.get("wms_co_id") for b in matched]
+        raise ValueError(f"实体仓「{name}」匹配到多个 wms_co_id: {ids}")
+    return int(matched[0].get("wms_co_id"))
+
+
+def _normalize_allocation_items(raw_items: list[Any] | None) -> list[dict[str, Any]]:
+    if not raw_items or not isinstance(raw_items, list):
+        raise ValueError("items 为必填数组")
+    out: list[dict[str, Any]] = []
+    for i, row in enumerate(raw_items):
+        if not isinstance(row, dict):
+            raise ValueError(f"items[{i}] 必须是对象")
+        sku_id = str(row.get("sku_id") or "").strip()
+        if not sku_id:
+            raise ValueError(f"items[{i}].sku_id 为必填")
+        item: dict[str, Any] = {"sku_id": sku_id}
+        if row.get("qty") is not None and str(row.get("qty")).strip() != "":
+            item["qty"] = int(row["qty"])
+        sku_sns = row.get("sku_sns")
+        if sku_sns:
+            if not isinstance(sku_sns, list):
+                raise ValueError(f"items[{i}].sku_sns 必须是数组")
+            sns: list[dict[str, str]] = []
+            for j, sn in enumerate(sku_sns):
+                if not isinstance(sn, dict):
+                    raise ValueError(f"items[{i}].sku_sns[{j}] 必须是对象")
+                sid = str(sn.get("sku_id") or "").strip()
+                sn_code = str(sn.get("sku_sn") or "").strip()
+                if not sid or not sn_code:
+                    raise ValueError(
+                        f"items[{i}].sku_sns[{j}] 需同时有 sku_id 与 sku_sn"
+                    )
+                sns.append({"sku_id": sid, "sku_sn": sn_code})
+            item["sku_sns"] = sns
+        out.append(item)
+    return out
+
+
+_so_id_lock = threading.Lock()
+
+
+def next_allocation_so_id() -> str:
+    """Generate external so_id: YYYYMMDD + 4-digit daily sequence."""
+    today = datetime.now().strftime("%Y%m%d")
+    seq_path = os.path.join(os.path.dirname(TOKEN_FILE), ".jst_lwh_so_id_seq.json")
+    with _so_id_lock:
+        data: dict[str, Any] = {"date": today, "seq": 0}
+        if os.path.isfile(seq_path):
+            try:
+                with open(seq_path, encoding="utf-8") as f:
+                    loaded = json.load(f)
+                if isinstance(loaded, dict) and loaded.get("date") == today:
+                    data = loaded
+            except (OSError, json.JSONDecodeError, TypeError):
+                pass
+        data["seq"] = int(data.get("seq") or 0) + 1
+        data["date"] = today
+        os.makedirs(os.path.dirname(seq_path) or ".", exist_ok=True)
+        with open(seq_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+        return f"{today}{int(data['seq']):04d}"
+
+
+def _available_qty(inv: dict[str, Any] | None) -> float:
+    if not inv:
+        return 0
+    for key in ("orderable", "qty"):
+        if inv.get(key) is not None and str(inv.get(key)).strip() != "":
+            try:
+                return float(inv[key])
+            except (TypeError, ValueError):
+                continue
+    return 0
+
+
+def create_lwh_allocation(
+    *,
+    out_lwh: Any,
+    in_lwh: Any,
+    remark: str,
+    items: list[Any],
+    wms: Any = None,
+    so_id: str | None = None,
+    examine: bool = False,
+) -> dict[str, Any]:
+    """
+    Create virtual-warehouse allocation after resolving names and pre-checks.
+    Returns {io_id, so_id, out_lwh_id, in_lwh_id, wms_co_id}.
+    """
+    rem = str(remark or "").strip()
+    if not rem:
+        raise ValueError("remark 为必填")
+
+    warehouses = list_lock_warehouses()
+    out_id, out_wh = _resolve_lwh(
+        out_lwh,
+        warehouses,
+        label="调出云仓",
+        not_found_prefix="查不到调出云仓",
+    )
+    in_id, in_wh = _resolve_lwh(
+        in_lwh,
+        warehouses,
+        label="调入云仓",
+        not_found_prefix="查不到调入云仓",
+    )
+    wms_co_id = _resolve_wms_co_id(wms, out_wh, in_wh)
+    item_list = _normalize_allocation_items(items)
+
+    for item in item_list:
+        sku_id = item["sku_id"]
+        if query_sku_raw(sku_id) is None:
+            raise ValueError(f"查不到SKU「{sku_id}」")
+
+    for item in item_list:
+        if "qty" not in item:
+            continue
+        need = int(item["qty"])
+        sku_id = item["sku_id"]
+        inv_rows = query_inventory_by_sku(sku_id, [wms_co_id], has_lock_qty=True)
+        inv = inv_rows[0] if inv_rows else None
+        available = _available_qty(inv)
+        if available < need:
+            raise ValueError(
+                f"SKU「{sku_id}」库存不足（可用{available:g}/需要{need}）"
+            )
+
+    so = str(so_id or "").strip() or next_allocation_so_id()
+    biz_data = {
+        "out_lwh_id": int(out_id),
+        "in_lwh_id": int(in_id),
+        "wms_co_id": int(wms_co_id),
+        "so_id": so,
+        "remark": rem,
+        "items": item_list,
+        "examine": bool(examine),
+    }
+
+    try:
+        result = _post_biz(LWH_ALLOCATION_CREATE_PATH, biz_data)
+    except RuntimeError as e:
+        raise ValueError(f"创建调拨失败：{e}") from e
+
+    if result.get("code") != 0:
+        raise ValueError(
+            f"创建调拨失败：[{result.get('code')}] {result.get('msg') or result}"
+        )
+
+    data = result.get("data") or {}
+    if isinstance(data, dict) and data.get("code") not in (None, 0, "0"):
+        raise ValueError(
+            f"创建调拨失败：[{data.get('code')}] {data.get('msg') or data}"
+        )
+
+    io_id = data.get("io_id") if isinstance(data, dict) else None
+    return {
+        "io_id": io_id,
+        "so_id": so,
+        "out_lwh_id": int(out_id),
+        "in_lwh_id": int(in_id),
+        "wms_co_id": int(wms_co_id),
+    }

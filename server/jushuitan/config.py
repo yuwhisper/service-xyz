@@ -10,6 +10,9 @@ SKU_QUERY_PATH = "/open/sku/query"
 ORDER_QUERY_PATH = "/open/orders/single/query"
 INVENTORY_QUERY_PATH = "/open/inventory/query"
 WAREHOUSE_LIST_PATH = "/open/webapi/itemapi/lockwarehouse/getwarehouselist"
+LWH_ALLOCATION_CREATE_PATH = (
+    "/open/webapi/itemapi/lockwarehouse/lwhallocationcreate"
+)
 INIT_TOKEN_PATH = "/openWeb/auth/getInitToken"
 ACCESS_TOKEN_PATH = "/openWeb/auth/accessToken"
 REFRESH_TOKEN_PATH = "/openWeb/auth/refreshToken"

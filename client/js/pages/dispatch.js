@@ -42,6 +42,15 @@ const API_PARAMS = {
   '/service/zyx/jst/lwh/query': [
     { key: 'name', label: 'name（虚拟仓中文名）', type: 'text' },
   ],
+  '/service/zyx/jst/lwh/allocation/create': [
+    { key: 'out_lwh', label: 'out_lwh（调出虚拟仓名或id）', type: 'text' },
+    { key: 'in_lwh', label: 'in_lwh（调入虚拟仓名或id）', type: 'text' },
+    { key: 'wms', label: 'wms（实体仓名或id，可空）', type: 'text' },
+    { key: 'so_id', label: 'so_id（外部单号，空则自动）', type: 'text' },
+    { key: 'remark', label: 'remark（备注）', type: 'text' },
+    { key: 'items', label: 'items（JSON如[{"sku_id":"A","qty":1}]）', type: 'json' },
+    { key: 'examine', label: 'examine（审核生效）', type: 'bool' },
+  ],
   '/service/zyx/dingtalk/dingpan/upload': [
     { key: 'local_path', label: 'local_path（服务器本地路径）', type: 'text' },
     { key: 'as_zip', label: 'as_zip（目录先压缩）', type: 'bool' },
@@ -368,6 +377,44 @@ const API_DOCS = {
       { key: 'code', desc: '业务状态码，成功固定为 0' },
       { key: 'data.lwh_id', desc: '虚拟仓编号' },
       { key: 'data.bind_wms', desc: '绑定的实体仓列表，含 wms_co_id / wms_name' },
+    ],
+  },
+  '/service/zyx/jst/lwh/allocation/create': {
+    requestExample: {
+      out_lwh: 'TEMU仓',
+      in_lwh: '备货仓',
+      wms: '义乌仓',
+      so_id: '',
+      remark: '接口创建调拨',
+      examine: false,
+      items: [{ sku_id: 'SKU001', qty: 1 }],
+    },
+    requestFields: [
+      { key: 'out_lwh', type: 'string', required: '是', desc: '调出虚拟仓：中文名或数字 id' },
+      { key: 'in_lwh', type: 'string', required: '是', desc: '调入虚拟仓：中文名或数字 id' },
+      { key: 'wms', type: 'string', required: '否', desc: '实体仓中文名或 id；共有仅1绑定时可空' },
+      { key: 'so_id', type: 'string', required: '否', desc: '外部单号；空则自动 YYYYMMDD+流水' },
+      { key: 'remark', type: 'string', required: '是', desc: '备注' },
+      { key: 'items', type: 'array', required: '是', desc: '明细，sku_id 必填，qty/sku_sns 非必填' },
+      { key: 'examine', type: 'boolean', required: '否', desc: '是否审核生效，默认 false' },
+    ],
+    responseExample: {
+      code: 0,
+      data: {
+        io_id: 13154952,
+        so_id: '202607280001',
+        out_lwh_id: 818,
+        in_lwh_id: 798,
+        wms_co_id: 12252,
+      },
+    },
+    responseFields: [
+      { key: 'code', desc: '业务状态码，成功固定为 0' },
+      { key: 'data.io_id', desc: '聚水潭单据编号' },
+      { key: 'data.so_id', desc: '外部单号' },
+      { key: 'data.out_lwh_id', desc: '调出虚拟仓 id' },
+      { key: 'data.in_lwh_id', desc: '调入虚拟仓 id' },
+      { key: 'data.wms_co_id', desc: '实体仓编码' },
     ],
   },
   '/service/zyx/ozon/fahuo': {

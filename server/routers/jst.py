@@ -6,6 +6,7 @@ from fastapi import APIRouter, Body, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
 from server.jushuitan.client import (
+    create_lwh_allocation,
     fetch_token_info,
     get_lwh_by_name,
     query_inventory_by_sku,
@@ -128,6 +129,39 @@ class LwhQueryBody(BaseModel):
     name: str = Field(..., description="虚拟仓中文名，精确匹配")
 
 
+class AllocationCreateBody(BaseModel):
+    out_lwh: str = Field(..., description="调出虚拟仓：中文名或数字 id")
+    in_lwh: str = Field(..., description="调入虚拟仓：中文名或数字 id")
+    wms: str | None = Field(
+        default=None,
+        description="实体仓：中文名或 id；两边共有仅1绑定时可空",
+    )
+    so_id: str | None = Field(
+        default=None,
+        description="外部单号；空则自动 YYYYMMDD+流水",
+    )
+    remark: str = Field(..., description="备注")
+    items: list[Any] = Field(..., description="明细 [{sku_id, qty?, sku_sns?}]")
+    examine: bool = Field(default=False, description="是否审核生效")
+
+    @field_validator("items", mode="before")
+    @classmethod
+    def _parse_items(cls, value: Any) -> list[Any]:
+        if value is None or value == "":
+            raise ValueError("items 为必填数组")
+        if isinstance(value, list):
+            return value
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                raise ValueError("items 为必填数组")
+            parsed = json.loads(text)
+            if not isinstance(parsed, list):
+                raise ValueError("items 必须是 JSON 数组")
+            return parsed
+        raise ValueError("items 必须是数组")
+
+
 @router.get("/gettoken")
 async def get_token_get(
     force: bool = Query(False, description="忽略缓存重新换取"),
@@ -217,6 +251,19 @@ async def query_lwh_post(body: LwhQueryBody):
     return await _query_lwh(body.name)
 
 
+@router.post("/lwh/allocation/create")
+async def create_allocation_post(body: AllocationCreateBody):
+    return await _create_allocation(
+        out_lwh=body.out_lwh,
+        in_lwh=body.in_lwh,
+        wms=body.wms,
+        so_id=body.so_id,
+        remark=body.remark,
+        items=body.items,
+        examine=body.examine,
+    )
+
+
 def _get_token(*, force: bool, code: str | None):
     try:
         data = fetch_token_info(force=force, code=code)
@@ -299,6 +346,36 @@ async def _query_inventory(
 async def _query_lwh(name: str):
     try:
         data = await asyncio.to_thread(get_lwh_by_name, name)
+        return {"code": 0, "data": data}
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(502, str(e)) from e
+    except Exception as e:
+        raise HTTPException(500, str(e)) from e
+
+
+async def _create_allocation(
+    *,
+    out_lwh: Any,
+    in_lwh: Any,
+    remark: str,
+    items: list[Any],
+    wms: Any = None,
+    so_id: str | None = None,
+    examine: bool = False,
+):
+    try:
+        data = await asyncio.to_thread(
+            create_lwh_allocation,
+            out_lwh=out_lwh,
+            in_lwh=in_lwh,
+            wms=wms,
+            so_id=so_id,
+            remark=remark,
+            items=items,
+            examine=examine,
+        )
         return {"code": 0, "data": data}
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
