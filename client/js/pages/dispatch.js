@@ -359,11 +359,15 @@ const API_DOCS = {
     ],
     responseExample: {
       code: 0,
-      data: { lwh_id: 818 },
+      data: {
+        lwh_id: 818,
+        bind_wms: [{ wms_co_id: 12252, wms_name: '实体仓名' }],
+      },
     },
     responseFields: [
       { key: 'code', desc: '业务状态码，成功固定为 0' },
       { key: 'data.lwh_id', desc: '虚拟仓编号' },
+      { key: 'data.bind_wms', desc: '绑定的实体仓列表，含 wms_co_id / wms_name' },
     ],
   },
   '/service/zyx/ozon/fahuo': {

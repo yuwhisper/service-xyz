@@ -149,7 +149,7 @@ python server/main.py
 | GET/POST | `/jst/sku/query` | 按 `sku` 查商品资料，返回原始字段 |
 | GET/POST | `/jst/order/query` | 订单查询：`o_ids`/`so_ids`/时间窗/`start_ts`/状态等可选；`order_flds`/`order_item_flds` 拆成独立布尔参数 |
 | GET/POST | `/jst/inventory/query` | 按 `sku` + `wms_co_ids` 查分仓库存 |
-| GET/POST | `/jst/lwh/query` | 按中文虚拟仓名精确匹配，返回 `{ lwh_id }` |
+| GET/POST | `/jst/lwh/query` | 按中文虚拟仓名精确匹配，返回 `{ lwh_id, bind_wms }` |
 
 ## 内置业务模块
 
@@ -190,7 +190,7 @@ Content-Type: application/json
 - Token 与 `/jst/gettoken` 共用 `get_access_token()` 缓存（`.jst_tokens.json`）
 - SKU / 订单 / 库存接口返回聚水潭原始字段，不做翻译或二次加工
 - 库存：`POST /jst/inventory/query`，body `{ "sku": "...", "wms_co_ids": [分仓编号, ...] }`；空列表表示所有仓总库存
-- 虚拟仓：`POST /jst/lwh/query`，body `{ "name": "TEMU仓" }` → `{ "code": 0, "data": { "lwh_id": ... } }`
+- 虚拟仓：`POST /jst/lwh/query`，body `{ "name": "TEMU仓" }` → `{ "code": 0, "data": { "lwh_id": ..., "bind_wms": [{ "wms_co_id", "wms_name" }] } }`
 
 ## 数据库
 

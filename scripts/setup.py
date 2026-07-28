@@ -151,7 +151,7 @@ async def setup():
         ),
         (
             "聚水潭按名称查虚拟仓ID",
-            "按中文虚拟仓名精确匹配，返回 lwh_id",
+            "按中文虚拟仓名精确匹配，返回 lwh_id 与 bind_wms（实体仓）",
             "POST",
             "/service/zyx/jst/lwh/query",
             "json",

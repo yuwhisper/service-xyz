@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from server.jushuitan.client import (
     fetch_token_info,
-    get_lwh_id_by_name,
+    get_lwh_by_name,
     query_inventory_by_sku,
     query_order_raw,
     query_sku_raw,
@@ -298,8 +298,8 @@ async def _query_inventory(
 
 async def _query_lwh(name: str):
     try:
-        lwh_id = await asyncio.to_thread(get_lwh_id_by_name, name)
-        return {"code": 0, "data": {"lwh_id": lwh_id}}
+        data = await asyncio.to_thread(get_lwh_by_name, name)
+        return {"code": 0, "data": data}
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
     except RuntimeError as e:

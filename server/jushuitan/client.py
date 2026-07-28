@@ -487,10 +487,10 @@ def list_lock_warehouses() -> list[dict[str, Any]]:
     return warehouses
 
 
-def get_lwh_id_by_name(name: str) -> Any:
+def get_lwh_by_name(name: str) -> dict[str, Any]:
     """
-    Resolve Chinese virtual warehouse name to lwh_id (exact match on name).
-    Raises ValueError if empty / not found / duplicate.
+    Resolve Chinese virtual warehouse name (exact match on name).
+    Returns {lwh_id, bind_wms}. Raises ValueError if empty / not found / duplicate.
     """
     text = (name or "").strip()
     if not text:
@@ -507,4 +507,16 @@ def get_lwh_id_by_name(name: str) -> Any:
         ids = [wh.get("lwh_id") for wh in matched]
         raise ValueError(f"虚拟仓「{text}」匹配到多条: {ids}")
 
-    return matched[0].get("lwh_id")
+    item = matched[0]
+    bind_wms = item.get("bind_wms") or []
+    if not isinstance(bind_wms, list):
+        bind_wms = []
+    return {
+        "lwh_id": item.get("lwh_id"),
+        "bind_wms": bind_wms,
+    }
+
+
+def get_lwh_id_by_name(name: str) -> Any:
+    """Backward-compatible: return only lwh_id."""
+    return get_lwh_by_name(name)["lwh_id"]
