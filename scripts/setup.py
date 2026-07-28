@@ -116,10 +116,10 @@ async def setup():
         ),
         (
             "钉钉AI多维表上传附件(文件)",
-            "multipart 上传附件到AI表格资源空间",
+            "form-data 上传附件到AI表格资源空间",
             "POST",
             "/service/zyx/dingtalk/notable/upload-attachment-file",
-            "multipart",
+            "form-data",
         ),
         (
             "聚水潭获取Token",
