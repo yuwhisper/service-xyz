@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from server.dingtalk.dingpan import upload_directory_as_zip, upload_file
+from server.dingtalk.notable import insert_records
 from server.dingtalk.workbook import get_last_row, write_cells
 
 router = APIRouter(prefix="/service/zyx/dingtalk", tags=["dingtalk"])
@@ -109,6 +110,44 @@ async def workbook_last_row(body: WorkbookLastRowBody):
             user_id=body.user_id,
             workbook_id=body.workbook_id,
             sheet_id=body.sheet_id,
+        )
+        return {"code": 0, "data": data}
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    except Exception as e:
+        raise HTTPException(500, str(e)) from e
+
+
+class NotableInsertBody(BaseModel):
+    user_id: str = Field(..., description="操作人 userid，服务端会换取 unionId")
+    base_id: str = Field(..., description="AI 多维表文档 ID（baseId）")
+    sheet_id: str = Field(..., description="数据表名称或 ID（不是视图页签）")
+    records: list[dict[str, Any]] = Field(..., description="记录列表，每项为字段名到值的字典")
+
+    @field_validator("user_id", "base_id", "sheet_id")
+    @classmethod
+    def _strip_required(cls, v: str) -> str:
+        text = (v or "").strip()
+        if not text:
+            raise ValueError("不能为空")
+        return text
+
+    @field_validator("records")
+    @classmethod
+    def _records_not_empty(cls, v: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if not v:
+            raise ValueError("records 不能为空")
+        return v
+
+
+@router.post("/notable/records")
+async def notable_insert_records(body: NotableInsertBody):
+    try:
+        data = insert_records(
+            user_id=body.user_id,
+            base_id=body.base_id,
+            sheet_id=body.sheet_id,
+            records=body.records,
         )
         return {"code": 0, "data": data}
     except ValueError as e:

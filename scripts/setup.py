@@ -101,6 +101,13 @@ async def setup():
             "json",
         ),
         (
+            "钉钉AI多维表写入",
+            "向AI多维表指定数据表新增记录",
+            "POST",
+            "/service/zyx/dingtalk/notable/records",
+            "json",
+        ),
+        (
             "聚水潭获取Token",
             "获取或刷新聚水潭 OpenAPI access_token",
             "GET",

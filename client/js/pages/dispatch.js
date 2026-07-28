@@ -57,6 +57,12 @@ const API_PARAMS = {
     { key: 'workbook_id', label: 'workbook_id（文档ID）', type: 'text' },
     { key: 'sheet_id', label: 'sheet_id（工作表名）', type: 'text' },
   ],
+  '/service/zyx/dingtalk/notable/records': [
+    { key: 'user_id', label: 'user_id（操作人 userid）', type: 'text' },
+    { key: 'base_id', label: 'base_id（AI多维表文档ID）', type: 'text' },
+    { key: 'sheet_id', label: 'sheet_id（数据表名，如数据表）', type: 'text' },
+    { key: 'records', label: 'records（JSON数组，如[{"店铺名":"1688-01"}]）', type: 'json' },
+  ],
   '/service/zyx/ozon/fahuo': [
     { key: 'wait', label: 'wait（true=同步等待结果）', type: 'bool' },
     { key: 'upload_to_dingpan', label: 'upload_to_dingpan（上传钉盘）', type: 'bool' },
@@ -99,6 +105,31 @@ const API_DOCS = {
       { key: 'data.columnCount', desc: '工作表总列数' },
       { key: 'data.last_excel_row', desc: 'Excel 行号（lastNonEmptyRow+1）；空表为 0' },
       { key: 'data.next_excel_row', desc: '下一行可写位置；空表为 1，写入时可用 A{next_excel_row}' },
+    ],
+  },
+  '/service/zyx/dingtalk/notable/records': {
+    requestExample: {
+      user_id: '17605205775264779',
+      base_id: 'X6GRezwJlLr9OOrrfg0NjexAJdqbropQ',
+      sheet_id: '数据表',
+      records: [{ '店铺名': '1688-01' }],
+    },
+    requestFields: [
+      { key: 'user_id', type: 'string', required: '是', desc: '操作人 userid，服务端换 unionId' },
+      { key: 'base_id', type: 'string', required: '是', desc: 'AI 多维表文档 ID（链接 /nodes/ 后一段）' },
+      { key: 'sheet_id', type: 'string', required: '是', desc: '数据表名称或 ID（左侧「数据表」，不是视图页签 1688-01）' },
+      { key: 'records', type: 'array', required: '是', desc: '记录列表；每项为 {字段名: 值}，也可 {fields:{...}}' },
+    ],
+    responseExample: {
+      code: 0,
+      data: {
+        value: [{ id: 'recxxxx' }],
+      },
+    },
+    responseFields: [
+      { key: 'code', desc: '业务状态码，成功固定为 0' },
+      { key: 'data.value', desc: '成功新增的记录列表' },
+      { key: 'data.value[].id', desc: '新建记录的 recordId' },
     ],
   },
   '/service/zyx/dingtalk/workbook/write': {

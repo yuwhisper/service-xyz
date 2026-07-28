@@ -3,7 +3,7 @@
 **Service XYZ** — 接口管理后台 + 业务 API 网关。
 
 - 控制台：按影刀风格管理/调试/调度 HTTP 接口，查看执行日志
-- 内置业务：Ozon FBO 发货、钉钉钉盘上传 / 在线表写入、聚水潭 Token / SKU / 订单 / 库存查询
+- 内置业务：Ozon FBO 发货、钉钉钉盘上传 / 在线表 / AI多维表、聚水潭 Token / SKU / 订单 / 库存查询
 - 全站 API **免 JWT**，影刀等外部系统可直接调用
 
 ## 沟通方式
@@ -144,6 +144,7 @@ python server/main.py
 | POST | `/dingtalk/dingpan/upload` | 上传本地文件/目录到钉盘 |
 | POST | `/dingtalk/workbook/write` | 写入钉钉在线表格单元格区域 |
 | POST | `/dingtalk/workbook/last-row` | 获取工作表最后非空行 / 下一行可写位置 |
+| POST | `/dingtalk/notable/records` | AI 多维表新增记录 |
 | GET/POST | `/jst/gettoken` | 聚水潭 access_token（`code` / `force`） |
 | GET/POST | `/jst/sku/query` | 按 `sku` 查商品资料，返回原始字段 |
 | GET/POST | `/jst/order/query` | 订单查询：`o_ids`/`so_ids`/时间窗/`start_ts`/状态等可选；`order_flds`/`order_item_flds` 拆成独立布尔参数 |
@@ -180,6 +181,7 @@ Content-Type: application/json
 - 上传路径白名单：`DINGTALK_UPLOAD_ALLOW_ROOTS`
 - 在线表写入：`POST /dingtalk/workbook/write`，body 传 `user_id` / `workbook_id` / `sheet_id` / `range_address` / `values`；服务端用 userid 换 unionId 后写表；成功 `code` 仅为 `0`，失败走 HTTP + `detail`
 - 在线表最后一行：`POST /dingtalk/workbook/last-row`，body 传 `user_id` / `workbook_id` / `sheet_id`；返回 `lastNonEmptyRow`、`last_excel_row`、`next_excel_row`（写入可用 `A{next_excel_row}`）
+- AI 多维表写入：`POST /dingtalk/notable/records`，body 传 `user_id` / `base_id` / `sheet_id` / `records`；`sheet_id` 为左侧数据表名（不是视图页签）；需权限 `Notable.Base.Write.All`
 
 ### 聚水潭（`server/jushuitan/`）
 
@@ -216,6 +218,7 @@ Content-Type: application/json
 | 钉钉钉盘上传 | POST | `/service/zyx/dingtalk/dingpan/upload` | json |
 | 钉钉在线表写入 | POST | `/service/zyx/dingtalk/workbook/write` | json |
 | 钉钉在线表最后一行 | POST | `/service/zyx/dingtalk/workbook/last-row` | json |
+| 钉钉AI多维表写入 | POST | `/service/zyx/dingtalk/notable/records` | json |
 | 聚水潭获取Token | GET | `/service/zyx/jst/gettoken` | none |
 | 聚水潭查询商品资料 | GET | `/service/zyx/jst/sku/query` | none |
 | 聚水潭查询订单详情 | GET | `/service/zyx/jst/order/query` | none |
