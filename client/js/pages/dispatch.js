@@ -409,12 +409,9 @@ const API_DOCS = {
       },
     },
     responseFields: [
-      { key: 'code', desc: '业务状态码，成功固定为 0' },
-      { key: 'data.io_id', desc: '聚水潭单据编号' },
-      { key: 'data.so_id', desc: '外部单号' },
-      { key: 'data.out_lwh_id', desc: '调出虚拟仓 id' },
-      { key: 'data.in_lwh_id', desc: '调入虚拟仓 id' },
-      { key: 'data.wms_co_id', desc: '实体仓编码' },
+      { key: 'code', desc: '0成功；非0失败（仍HTTP200）' },
+      { key: 'data', desc: '成功为 {io_id,so_id,...}；失败为二维列表[调出仓,实体仓,调入仓,SKU,数量,备注,失败原因]' },
+      { key: 'msg', desc: '失败时的简短原因（成功通常无）' },
     ],
   },
   '/service/zyx/ozon/fahuo': {

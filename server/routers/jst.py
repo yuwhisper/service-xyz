@@ -264,6 +264,54 @@ async def create_allocation_post(body: AllocationCreateBody):
     )
 
 
+def _allocation_fail_rows(
+    *,
+    out_lwh: Any,
+    in_lwh: Any,
+    wms: Any,
+    remark: str,
+    items: list[Any],
+    reason: str,
+) -> list[list[Any]]:
+    """失败时展开为二维列表：调出仓,实体仓,调入仓,SKU,数量,备注,失败原因。"""
+    reason_text = str(reason or "").strip()
+    out_text = "" if out_lwh is None else str(out_lwh).strip()
+    in_text = "" if in_lwh is None else str(in_lwh).strip()
+    wms_text = "" if wms is None else str(wms).strip()
+    remark_text = "" if remark is None else str(remark).strip()
+
+    rows: list[list[Any]] = []
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        sku_id = str(item.get("sku_id") or "").strip()
+        qty = item.get("qty")
+        if qty is None or str(qty).strip() == "":
+            qty_val: Any = ""
+        else:
+            qty_val = qty
+        rows.append([
+            out_text,
+            wms_text,
+            in_text,
+            sku_id,
+            qty_val,
+            remark_text,
+            reason_text,
+        ])
+    if not rows:
+        rows.append([
+            out_text,
+            wms_text,
+            in_text,
+            "",
+            "",
+            remark_text,
+            reason_text,
+        ])
+    return rows
+
+
 def _get_token(*, force: bool, code: str | None):
     try:
         data = fetch_token_info(force=force, code=code)
@@ -377,9 +425,30 @@ async def _create_allocation(
             examine=examine,
         )
         return {"code": 0, "data": data}
-    except ValueError as e:
-        raise HTTPException(400, str(e)) from e
-    except RuntimeError as e:
-        raise HTTPException(502, str(e)) from e
+    except (ValueError, RuntimeError) as e:
+        # 业务失败：HTTP 200 + code!=0，data 为结果二维列表（影刀好处理）
+        return {
+            "code": 1,
+            "msg": str(e),
+            "data": _allocation_fail_rows(
+                out_lwh=out_lwh,
+                in_lwh=in_lwh,
+                wms=wms,
+                remark=remark,
+                items=items,
+                reason=str(e),
+            ),
+        }
     except Exception as e:
-        raise HTTPException(500, str(e)) from e
+        return {
+            "code": 1,
+            "msg": str(e),
+            "data": _allocation_fail_rows(
+                out_lwh=out_lwh,
+                in_lwh=in_lwh,
+                wms=wms,
+                remark=remark,
+                items=items,
+                reason=str(e),
+            ),
+        }
