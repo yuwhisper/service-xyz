@@ -505,11 +505,9 @@ def get_lwh_by_name(name: str) -> dict[str, Any]:
         wh for wh in warehouses if str(wh.get("name") or "").strip() == text
     ]
     if not matched:
-        names = [str(wh.get("name") or "") for wh in warehouses[:30]]
-        raise ValueError(f"未找到虚拟仓「{text}」。前若干名称示例: {names}")
+        raise ValueError(f"未找到虚拟仓「{text}」")
     if len(matched) > 1:
-        ids = [wh.get("lwh_id") for wh in matched]
-        raise ValueError(f"虚拟仓「{text}」匹配到多条: {ids}")
+        raise ValueError(f"虚拟仓「{text}」匹配到多条")
 
     item = matched[0]
     bind_wms = item.get("bind_wms") or []
@@ -565,19 +563,14 @@ def _resolve_lwh(
         for wh in warehouses:
             if wh.get("lwh_id") == as_id or str(wh.get("lwh_id")) == str(as_id):
                 return as_id, wh
-        names = [str(wh.get("name") or "") for wh in warehouses[:30]]
-        raise ValueError(
-            f"{not_found_prefix}「{name_or_id}」。前若干名称示例: {names}"
-        )
+        raise ValueError(f"{not_found_prefix}「{name_or_id}」")
 
     name = str(name_or_id).strip()
     matched = [wh for wh in warehouses if str(wh.get("name") or "").strip() == name]
     if not matched:
-        names = [str(wh.get("name") or "") for wh in warehouses[:30]]
-        raise ValueError(f"{not_found_prefix}「{name}」。前若干名称示例: {names}")
+        raise ValueError(f"{not_found_prefix}「{name}」")
     if len(matched) > 1:
-        ids = [wh.get("lwh_id") for wh in matched]
-        raise ValueError(f"{label}「{name}」匹配到多条: {ids}")
+        raise ValueError(f"{label}「{name}」匹配到多条")
     return matched[0].get("lwh_id"), matched[0]
 
 
@@ -598,12 +591,7 @@ def _resolve_wms_co_id(
     if wms_value is None or str(wms_value).strip() == "":
         if len(candidate_binds) == 1:
             return int(candidate_binds[0].get("wms_co_id"))
-        names = [
-            f"{b.get('wms_name')}({b.get('wms_co_id')})" for b in candidate_binds
-        ]
-        raise ValueError(
-            f"实体仓有多个绑定，请填写 wms（中文名或 id）。候选: {names}"
-        )
+        raise ValueError("实体仓有多个绑定，请填写 wms（中文名或 id）")
 
     as_id = _as_int_or_none(wms_value)
     if as_id is not None:
@@ -620,11 +608,9 @@ def _resolve_wms_co_id(
         uniq[b.get("wms_co_id")] = b
     matched = list(uniq.values())
     if not matched:
-        names = [str(b.get("wms_name") or "") for b in pool]
-        raise ValueError(f"查不到实体仓「{name}」。候选 wms_name: {names}")
+        raise ValueError(f"查不到实体仓「{name}」")
     if len(matched) > 1:
-        ids = [b.get("wms_co_id") for b in matched]
-        raise ValueError(f"实体仓「{name}」匹配到多个 wms_co_id: {ids}")
+        raise ValueError(f"实体仓「{name}」匹配到多条")
     return int(matched[0].get("wms_co_id"))
 
 
