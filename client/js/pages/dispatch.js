@@ -409,9 +409,9 @@ const API_DOCS = {
       },
     },
     responseFields: [
-      { key: 'code', desc: '0成功；非0失败（仍HTTP200）' },
-      { key: 'data', desc: '成功为 {io_id,so_id,...}；失败为二维列表[调出仓,实体仓,调入仓,SKU,数量,备注,失败原因]' },
-      { key: 'msg', desc: '失败时的简短原因（成功通常无）' },
+      { key: 'code', desc: '成功固定为 0' },
+      { key: 'data', desc: '成功时为 {io_id,so_id,out_lwh_id,in_lwh_id,wms_co_id}' },
+      { key: 'detail', desc: '失败时（HTTP400/502/500）为二维列表[调出仓,实体仓,调入仓,SKU,数量,备注,失败原因]' },
     ],
   },
   '/service/zyx/ozon/fahuo': {

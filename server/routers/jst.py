@@ -3,6 +3,7 @@ import json
 from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Query
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
 from server.jushuitan.client import (
@@ -425,30 +426,46 @@ async def _create_allocation(
             examine=examine,
         )
         return {"code": 0, "data": data}
-    except (ValueError, RuntimeError) as e:
-        # 业务失败：HTTP 200 + code!=0，data 为结果二维列表（影刀好处理）
-        return {
-            "code": 1,
-            "msg": str(e),
-            "data": _allocation_fail_rows(
-                out_lwh=out_lwh,
-                in_lwh=in_lwh,
-                wms=wms,
-                remark=remark,
-                items=items,
-                reason=str(e),
-            ),
-        }
+    except ValueError as e:
+        # 与之前一致：业务校验失败 HTTP 400；body 为二维列表
+        return JSONResponse(
+            status_code=400,
+            content={
+                "detail": _allocation_fail_rows(
+                    out_lwh=out_lwh,
+                    in_lwh=in_lwh,
+                    wms=wms,
+                    remark=remark,
+                    items=items,
+                    reason=str(e),
+                ),
+            },
+        )
+    except RuntimeError as e:
+        return JSONResponse(
+            status_code=502,
+            content={
+                "detail": _allocation_fail_rows(
+                    out_lwh=out_lwh,
+                    in_lwh=in_lwh,
+                    wms=wms,
+                    remark=remark,
+                    items=items,
+                    reason=str(e),
+                ),
+            },
+        )
     except Exception as e:
-        return {
-            "code": 1,
-            "msg": str(e),
-            "data": _allocation_fail_rows(
-                out_lwh=out_lwh,
-                in_lwh=in_lwh,
-                wms=wms,
-                remark=remark,
-                items=items,
-                reason=str(e),
-            ),
-        }
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": _allocation_fail_rows(
+                    out_lwh=out_lwh,
+                    in_lwh=in_lwh,
+                    wms=wms,
+                    remark=remark,
+                    items=items,
+                    reason=str(e),
+                ),
+            },
+        )
