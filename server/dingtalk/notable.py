@@ -1,7 +1,10 @@
-"""DingTalk AI Table (notable) — insert records."""
+"""DingTalk AI Table (notable) — insert records + attachment upload."""
 from __future__ import annotations
 
+import mimetypes
 import os
+import tempfile
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 from uuid import uuid4
@@ -9,8 +12,24 @@ from uuid import uuid4
 import requests
 
 from server.dingtalk.config import APP_KEY, APP_SECRET
+from server.dingtalk.dingpan import assert_path_allowed
 
 os.environ.setdefault("NO_PROXY", "*")
+
+
+def _guess_media_type(path: Path) -> str:
+    mime, _ = mimetypes.guess_type(str(path))
+    if mime:
+        return mime
+    ext = path.suffix.lower()
+    return {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+        ".pdf": "application/pdf",
+    }.get(ext, "application/octet-stream")
 
 
 class DingTalkNotableWriter:
@@ -70,6 +89,126 @@ class DingTalkNotableWriter:
 
         self._operator_cache[uid] = union_id
         return union_id
+
+    def get_resource_upload_info(
+        self,
+        *,
+        user_id: str,
+        base_id: str,
+        file_path: Path,
+    ) -> dict[str, Any]:
+        bid = (base_id or "").strip()
+        if not bid:
+            raise ValueError("base_id 不能为空")
+        if not file_path.is_file():
+            raise FileNotFoundError(f"本地文件不存在: {file_path}")
+
+        size = file_path.stat().st_size
+        media_type = _guess_media_type(file_path)
+        resource_name = file_path.name
+        operator_id = self.get_operator_id(user_id)
+
+        url = (
+            f"https://api.dingtalk.com/v1.0/doc/docs/resources/"
+            f"{quote(str(bid), safe='')}/uploadInfos/query"
+        )
+        resp = requests.post(
+            url,
+            params={"operatorId": operator_id},
+            headers={
+                "x-acs-dingtalk-access-token": self.get_access_token(),
+                "Content-Type": "application/json",
+            },
+            json={
+                "size": size,
+                "mediaType": media_type,
+                "resourceName": resource_name,
+            },
+            timeout=30,
+        )
+        if resp.status_code >= 400:
+            raise RuntimeError(f"获取上传信息失败 [{resp.status_code}]: {resp.text}")
+
+        data = resp.json()
+        result = data.get("result") or data
+        upload_url = result.get("uploadUrl")
+        resource_id = result.get("resourceId")
+        resource_url = result.get("resourceUrl")
+        if not upload_url or not resource_id or not resource_url:
+            raise RuntimeError(f"上传信息不完整: {data}")
+
+        return {
+            "uploadUrl": upload_url,
+            "resourceId": resource_id,
+            "resourceUrl": resource_url,
+            "size": size,
+            "mediaType": media_type,
+            "resourceName": resource_name,
+        }
+
+    def put_file(self, upload_url: str, file_path: Path, media_type: str) -> None:
+        with file_path.open("rb") as f:
+            resp = requests.put(
+                upload_url,
+                data=f,
+                headers={"Content-Type": media_type},
+                timeout=120,
+            )
+        if resp.status_code >= 400:
+            raise RuntimeError(f"PUT 上传失败 [{resp.status_code}]: {resp.text}")
+
+    def upload_attachment(
+        self,
+        *,
+        user_id: str,
+        base_id: str,
+        file_path: str | Path | None = None,
+        file_bytes: bytes | None = None,
+        filename: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        三步上传后返回可写入附件字段的对象：
+        {filename, size, type, url, resourceId}
+        """
+        tmp_path: Path | None = None
+        try:
+            if file_bytes is not None:
+                name = (filename or "upload.bin").strip() or "upload.bin"
+                suffix = Path(name).suffix or ".bin"
+                fd, tmp_name = tempfile.mkstemp(prefix="notable_", suffix=suffix)
+                os.close(fd)
+                tmp_path = Path(tmp_name)
+                tmp_path.write_bytes(file_bytes)
+                path = tmp_path
+                # ensure original filename used for DingTalk resourceName
+                # by writing into a named temp file under same dir
+                named = tmp_path.with_name(name)
+                if named != tmp_path:
+                    named.write_bytes(file_bytes)
+                    tmp_path.unlink(missing_ok=True)
+                    tmp_path = named
+                    path = named
+            elif file_path is not None:
+                path = assert_path_allowed(Path(file_path))
+                if not path.is_file():
+                    raise FileNotFoundError(f"本地文件不存在: {path}")
+            else:
+                raise ValueError("file_path 与 file_bytes 至少提供一个")
+
+            info = self.get_resource_upload_info(
+                user_id=user_id, base_id=base_id, file_path=path
+            )
+            self.put_file(info["uploadUrl"], path, info["mediaType"])
+            return {
+                "filename": info["resourceName"],
+                "size": info["size"],
+                "type": info["mediaType"],
+                "url": info["resourceUrl"],
+                "resourceId": info["resourceId"],
+            }
+        finally:
+            if tmp_path is not None:
+                tmp_path.unlink(missing_ok=True)
 
     def insert_records(
         self,
@@ -134,4 +273,22 @@ def insert_records(
         base_id=base_id,
         sheet_id=sheet_id,
         records=records,
+    )
+
+
+def upload_attachment(
+    *,
+    user_id: str,
+    base_id: str,
+    file_path: str | None = None,
+    file_bytes: bytes | None = None,
+    filename: str | None = None,
+) -> dict[str, Any]:
+    """Upload a file into AI Table resource space; return attachment field object."""
+    return DingTalkNotableWriter().upload_attachment(
+        user_id=user_id,
+        base_id=base_id,
+        file_path=file_path,
+        file_bytes=file_bytes,
+        filename=filename,
     )

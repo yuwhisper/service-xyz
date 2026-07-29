@@ -1,10 +1,10 @@
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field, field_validator
 
 from server.dingtalk.dingpan import upload_directory_as_zip, upload_file
-from server.dingtalk.notable import insert_records
+from server.dingtalk.notable import insert_records, upload_attachment
 from server.dingtalk.workbook import get_last_row, write_cells
 
 router = APIRouter(prefix="/service/zyx/dingtalk", tags=["dingtalk"])
@@ -150,6 +150,66 @@ async def notable_insert_records(body: NotableInsertBody):
             records=body.records,
         )
         return {"code": 0, "data": data}
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    except Exception as e:
+        raise HTTPException(500, str(e)) from e
+
+
+class NotableUploadPathBody(BaseModel):
+    user_id: str = Field(..., description="操作人 userid，服务端会换取 unionId")
+    base_id: str = Field(..., description="AI 多维表文档 ID（docId / baseId）")
+    file_path: str = Field(..., description="服务器本地文件路径（须在允许根目录内）")
+
+    @field_validator("user_id", "base_id", "file_path")
+    @classmethod
+    def _strip_required(cls, v: str) -> str:
+        text = (v or "").strip()
+        if not text:
+            raise ValueError("不能为空")
+        return text
+
+
+@router.post("/notable/upload-attachment")
+async def notable_upload_attachment_json(body: NotableUploadPathBody):
+    """JSON：用服务器本地路径上传附件，返回可写入附件列的对象。"""
+    try:
+        data = upload_attachment(
+            user_id=body.user_id,
+            base_id=body.base_id,
+            file_path=body.file_path,
+        )
+        return {"code": 0, "data": data}
+    except PermissionError as e:
+        raise HTTPException(403, str(e)) from e
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e)) from e
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    except Exception as e:
+        raise HTTPException(500, str(e)) from e
+
+
+@router.post("/notable/upload-attachment-file")
+async def notable_upload_attachment_file(
+    user_id: str = Form(...),
+    base_id: str = Form(...),
+    file: UploadFile = File(...),
+):
+    """multipart：上传文件内容到 AI 表格资源，返回附件对象。"""
+    try:
+        content = await file.read()
+        if not content:
+            raise HTTPException(400, "文件内容为空")
+        data = upload_attachment(
+            user_id=user_id.strip(),
+            base_id=base_id.strip(),
+            file_bytes=content,
+            filename=file.filename or "upload.bin",
+        )
+        return {"code": 0, "data": data}
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
     except Exception as e:
