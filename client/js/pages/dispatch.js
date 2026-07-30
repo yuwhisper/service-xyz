@@ -89,6 +89,20 @@ const API_PARAMS = {
     { key: 'wait', label: 'wait（true=同步等待结果）', type: 'bool' },
     { key: 'upload_to_dingpan', label: 'upload_to_dingpan（上传钉盘）', type: 'bool' },
   ],
+  '/service/zyx/yingdao/job/start': [
+    { key: 'robotUuid', label: 'robotUuid（应用UUID）*', type: 'text' },
+    { key: 'accountName', label: 'accountName（机器人账号，与分组二选一）', type: 'text' },
+    { key: 'robotClientGroupUuid', label: 'robotClientGroupUuid（分组，优先）', type: 'text' },
+    { key: 'params', label: 'params（JSON如[{"name":"开始日期","value":"2026-07-27","type":"str"}]）', type: 'json' },
+    { key: 'waitTimeoutSeconds', label: 'waitTimeoutSeconds（默认600）', type: 'text' },
+    { key: 'runTimeout', label: 'runTimeout（秒，可空）', type: 'text' },
+    { key: 'priority', label: 'priority（middle等）', type: 'text' },
+    { key: 'executeScope', label: 'executeScope（any/all，仅分组）', type: 'text' },
+    { key: 'useIdempotent', label: 'useIdempotent（幂等）', type: 'bool' },
+  ],
+  '/service/zyx/yingdao/job/query': [
+    { key: 'jobUuid', label: 'jobUuid*', type: 'text' },
+  ],
 };
 
 /** 接口参数文档：请求体示例 + 字段含义 + 响应体示例 + 每个响应字段含义 */
@@ -438,6 +452,60 @@ const API_DOCS = {
       { key: 'data.run_status', desc: '业务结果：success / partial / failed / skipped（异步未完成时可能暂无）' },
       { key: 'data.success', desc: '成功创建的供货单唯一 ID 列表' },
       { key: 'data.file_ids', desc: '上传钉盘后的文件 ID 列表' },
+    ],
+  },
+  '/service/zyx/yingdao/job/start': {
+    requestExample: {
+      robotUuid: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+      robotClientGroupUuid: 'yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy',
+      params: [{ name: '开始日期', value: '2026-07-27', type: 'str' }],
+      waitTimeoutSeconds: 600,
+      priority: 'middle',
+      executeScope: 'any',
+      useIdempotent: true,
+    },
+    requestFields: [
+      { key: 'robotUuid', type: 'string', required: '是', desc: '影刀应用/机器人 UUID' },
+      { key: 'accountName', type: 'string', required: '条件', desc: '执行账号名；与 robotClientGroupUuid 二选一，都填时以分组为准' },
+      { key: 'robotClientGroupUuid', type: 'string', required: '条件', desc: '机器人分组 UUID；与 accountName 二选一' },
+      { key: 'params', type: 'array', required: '否', desc: '应用入参列表，每项含 name/value/type；空项不传' },
+      { key: 'waitTimeoutSeconds', type: 'number', required: '否', desc: '排队等待超时（秒），默认 600' },
+      { key: 'runTimeout', type: 'number', required: '否', desc: '运行超时（秒）；不传则不限制' },
+      { key: 'priority', type: 'string', required: '否', desc: '优先级：high / middle / low，默认 middle' },
+      { key: 'executeScope', type: 'string', required: '否', desc: '仅分组有效：any / all，默认 any' },
+      { key: 'useIdempotent', type: 'boolean', required: '否', desc: '是否生成幂等 UUID，默认 true' },
+    ],
+    responseExample: {
+      code: 0,
+      data: {
+        jobUuid: 'zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz',
+        idempotentFlag: true,
+      },
+    },
+    responseFields: [
+      { key: 'code', desc: '业务状态码，成功固定为 0' },
+      { key: 'data.jobUuid', desc: '影刀任务 UUID，供 query 接口查询状态' },
+      { key: 'data.idempotentFlag', desc: '是否命中幂等（重复启动时可能为 true）' },
+    ],
+  },
+  '/service/zyx/yingdao/job/query': {
+    requestExample: {
+      jobUuid: 'zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz',
+    },
+    requestFields: [
+      { key: 'jobUuid', type: 'string', required: '是', desc: '启动接口返回的任务 UUID' },
+    ],
+    responseExample: {
+      code: 0,
+      data: {
+        status: 'running',
+        statusName: '运行中',
+      },
+    },
+    responseFields: [
+      { key: 'code', desc: '业务状态码，成功固定为 0' },
+      { key: 'data.status', desc: '影刀任务状态：waiting / running / finish / error 等' },
+      { key: 'data.statusName', desc: '状态中文名' },
     ],
   },
 };

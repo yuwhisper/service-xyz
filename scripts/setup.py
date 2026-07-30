@@ -163,6 +163,20 @@ async def setup():
             "/service/zyx/jst/lwh/allocation/create",
             "json",
         ),
+        (
+            "影刀启动应用",
+            "每日数据补全：启动影刀应用（Key在服务端）",
+            "POST",
+            "/service/zyx/yingdao/job/start",
+            "json",
+        ),
+        (
+            "影刀查询Job状态",
+            "按 jobUuid 查询影刀任务状态",
+            "POST",
+            "/service/zyx/yingdao/job/query",
+            "json",
+        ),
     ]
     for name, desc, method, path, body_type in builtins:
         exists = await execute_one(

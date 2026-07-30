@@ -3,7 +3,7 @@
 **Service XYZ** — 接口管理后台 + 业务 API 网关。
 
 - 控制台：按影刀风格管理/调试/调度 HTTP 接口，查看执行日志
-- 内置业务：Ozon FBO 发货、钉钉钉盘上传 / 在线表 / AI多维表、聚水潭 Token / SKU / 订单 / 库存查询
+- 内置业务：Ozon FBO 发货、钉钉钉盘上传 / 在线表 / AI多维表、聚水潭 Token / SKU / 订单 / 库存查询、影刀启动/查询 Job
 - 全站 API **免 JWT**，影刀等外部系统可直接调用
 
 ## 沟通方式
@@ -55,10 +55,12 @@ service-xyz/
 │   │   ├── schedules.py         # 定时任务 CRUD
 │   │   ├── ozon.py              # Ozon FBO 发货
 │   │   ├── dingtalk.py          # 钉盘上传 / 在线表写入
-│   │   └── jst.py               # 聚水潭 token / SKU / 订单 / 库存
+│   │   ├── jst.py               # 聚水潭 token / SKU / 订单 / 库存
+│   │   └── yingdao.py           # 影刀启动/查询 Job
 │   ├── ozon/                    # fahuo_core + fahuo_runner
 │   ├── jushuitan/               # OpenAPI client + token 缓存
-│   └── dingtalk/                # 钉盘上传 + 在线表写入实现
+│   ├── dingtalk/                # 钉盘上传 + 在线表写入实现
+│   └── yingdao/                 # 影刀 token + 启动/查询 Job
 ├── client/                      # Vue 3 SPA（纯静态）
 │   ├── index.html               # import map 入口
 │   ├── css/app.css
@@ -151,6 +153,8 @@ python server/main.py
 | GET/POST | `/jst/inventory/query` | 按 `sku` + `wms_co_ids` 查分仓库存 |
 | GET/POST | `/jst/lwh/query` | 按中文虚拟仓名精确匹配，返回 `{ lwh_id, bind_wms }` |
 | POST | `/jst/lwh/allocation/create` | 创建虚拟仓调拨单；校验调出/调入/实体仓/SKU/库存，详细中文报错 |
+| POST | `/yingdao/job/start` | 启动影刀应用；Key 在服务端，返回 `jobUuid` |
+| POST | `/yingdao/job/query` | 按 `jobUuid` 查询影刀任务状态 |
 
 ## 内置业务模块
 
@@ -194,6 +198,13 @@ Content-Type: application/json
 - 虚拟仓：`POST /jst/lwh/query`，body `{ "name": "TEMU仓" }` → `{ "code": 0, "data": { "lwh_id": ..., "bind_wms": [{ "wms_co_id", "wms_name" }] } }`
 - 虚拟仓调拨创建：`POST /jst/lwh/allocation/create`，body `{ out_lwh, in_lwh, wms?, so_id?, remark, items, examine? }`；创建前校验仓/SKU/库存，失败 detail 含「查不到调出云仓」等中文
 
+### 影刀（`server/yingdao/`）
+
+- 凭证：`YINGDAO_ACCESS_KEY_ID` / `YINGDAO_ACCESS_KEY_SECRET`（仅存服务端 `.env`）
+- 可选 URL 覆盖：`YINGDAO_TOKEN_URL` / `YINGDAO_JOB_START_URL` / `YINGDAO_JOB_QUERY_URL`
+- 启动：`POST /yingdao/job/start`，body `{ robotUuid, accountName?, robotClientGroupUuid?, params?, ... }`；账号与分组二选一
+- 查询：`POST /yingdao/job/query`，body `{ jobUuid }`；返回影刀原始 `status` / `statusName` 等
+
 ## 数据库
 
 库名 `zyx`。主要表：
@@ -230,6 +241,8 @@ Content-Type: application/json
 | 聚水潭查询商品库存 | POST | `/service/zyx/jst/inventory/query` | json |
 | 聚水潭按名称查虚拟仓ID | POST | `/service/zyx/jst/lwh/query` | json |
 | 聚水潭创建虚拟仓调拨单 | POST | `/service/zyx/jst/lwh/allocation/create` | json |
+| 影刀启动应用 | POST | `/service/zyx/yingdao/job/start` | json |
+| 影刀查询Job状态 | POST | `/service/zyx/yingdao/job/query` | json |
 
 内部路径（以 `/` 开头）：执行时转发到 `INTERNAL_API_BASE`（默认 `http://127.0.0.1:{PORT}`；生产一般为 8800）。
 
@@ -246,6 +259,7 @@ Content-Type: application/json
 | Ozon | `OZON_ARCHIVE_ROOT` `OZON_SHOP_DATA` `OZON_UPLOAD_DINGPAN` … |
 | 钉盘 | `DINGTALK_APP_KEY` `DINGTALK_APP_SECRET` `DINGTALK_UNION_ID` `DINGTALK_DEFAULT_FOLDER_URL` … |
 | 聚水潭 | `JUSHUITAN_APP_KEY` `JUSHUITAN_APP_SECRET` `JUSHUITAN_AUTH_CODE` `JUSHUITAN_TOKEN_FILE` |
+| 影刀 | `YINGDAO_ACCESS_KEY_ID` `YINGDAO_ACCESS_KEY_SECRET` `YINGDAO_TOKEN_URL` … |
 
 ## 约定
 
