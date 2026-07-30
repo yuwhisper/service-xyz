@@ -97,6 +97,13 @@ tbody tr:hover{background:#fafbfc}
 .form-group{margin-bottom:16px}
 .form-label{display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--c-text)}
 .form-input,.form-select,.form-textarea{width:100%;padding:9px 12px;border:1px solid var(--c-border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;outline:none;transition:all var(--transition);background:var(--c-white);color:var(--c-text);line-height:1.5}
+.form-compact{max-width:640px}
+.form-inline{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.form-inline .form-label{margin:0;min-width:118px;flex-shrink:0;font-size:12.5px}
+.form-inline .form-input,.form-inline .form-select{flex:1;min-width:0;padding:7px 10px}
+.form-inline-check{display:flex;align-items:center;gap:8px;margin:4px 0 8px 128px;font-size:13px}
+.form-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:720px){.form-grid-2{grid-template-columns:1fr}.form-inline{flex-wrap:wrap}.form-inline .form-label{min-width:100%}.form-inline-check{margin-left:0}}
 .form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--c-blue);box-shadow:0 0 0 3px rgba(22,93,255,.08)}
 .form-textarea{resize:vertical;min-height:80px}
 .form-input::placeholder{color:#c9cdd4}

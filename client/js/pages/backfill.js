@@ -15,87 +15,90 @@ export default {
       <p>Key 在服务端 .env，本页不展示密钥</p>
     </div>
 
-    <div class="card">
-      <div class="card-header"><div class="card-title">调度目标</div></div>
-      <div class="form-group">
-        <label class="form-label">robotUuid<span class="form-req">*</span></label>
-        <input class="form-input" v-model="form.robotUuid" placeholder="应用 UUID"/>
+    <div class="form-compact">
+      <div class="card">
+        <div class="card-header"><div class="card-title">调度目标</div></div>
+        <div class="form-inline">
+          <label class="form-label">robotUuid<span class="form-req">*</span></label>
+          <input class="form-input" v-model="form.robotUuid" placeholder="应用 UUID"/>
+        </div>
+        <div class="form-inline">
+          <label class="form-label">accountName</label>
+          <input class="form-input" v-model="form.accountName" placeholder="账号（与分组二选一）"/>
+        </div>
+        <div class="form-inline">
+          <label class="form-label">分组 UUID</label>
+          <input class="form-input" v-model="form.robotClientGroupUuid" placeholder="都填时以分组为准"/>
+        </div>
       </div>
-      <div class="form-group">
-        <label class="form-label">accountName <span style="color:var(--c-sub);font-weight:400;font-size:12px">条件必填</span></label>
-        <input class="form-input" v-model="form.accountName" placeholder="执行账号名"/>
-      </div>
-      <div class="form-group">
-        <label class="form-label">robotClientGroupUuid <span style="color:var(--c-sub);font-weight:400;font-size:12px">条件必填</span></label>
-        <input class="form-input" v-model="form.robotClientGroupUuid" placeholder="机器人分组 UUID"/>
-        <div class="cron-helper">账号与分组二选一，都填以分组为准</div>
-      </div>
-    </div>
 
-    <div class="card">
-      <div class="card-header"><div class="card-title">应用参数</div></div>
-      <div class="form-group">
-        <label class="form-label">开始日期</label>
-        <input class="form-input" type="date" v-model="form.startDate"/>
+      <div class="card">
+        <div class="card-header"><div class="card-title">应用参数</div></div>
+        <div class="form-grid-2">
+          <div class="form-inline">
+            <label class="form-label">开始日期</label>
+            <input class="form-input" type="date" v-model="form.startDate"/>
+          </div>
+          <div class="form-inline">
+            <label class="form-label">结束日期</label>
+            <input class="form-input" type="date" v-model="form.endDate"/>
+          </div>
+        </div>
       </div>
-      <div class="form-group">
-        <label class="form-label">结束日期</label>
-        <input class="form-input" type="date" v-model="form.endDate"/>
-      </div>
-    </div>
 
-    <div class="card">
-      <div class="card-header"><div class="card-title">可选调度</div></div>
-      <div class="form-group">
-        <label class="form-label">waitTimeoutSeconds</label>
-        <input class="form-input" type="number" v-model="form.waitTimeoutSeconds" placeholder="600"/>
-      </div>
-      <div class="form-group">
-        <label class="form-label">runTimeout</label>
-        <input class="form-input" type="number" v-model="form.runTimeout" placeholder="不传则不限制"/>
-      </div>
-      <div class="form-group">
-        <label class="form-label">priority</label>
-        <select class="form-select" v-model="form.priority">
-          <option value="low">low</option>
-          <option value="middle">middle</option>
-          <option value="high">high</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">executeScope</label>
-        <select class="form-select" v-model="form.executeScope">
-          <option value="any">any</option>
-          <option value="all">all</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+      <div class="card">
+        <div class="card-header"><div class="card-title">可选调度</div></div>
+        <div class="form-grid-2">
+          <div class="form-inline">
+            <label class="form-label">排队超时(秒)</label>
+            <input class="form-input" type="number" v-model="form.waitTimeoutSeconds" placeholder="600"/>
+          </div>
+          <div class="form-inline">
+            <label class="form-label">运行超时(秒)</label>
+            <input class="form-input" type="number" v-model="form.runTimeout" placeholder="空=不限制"/>
+          </div>
+          <div class="form-inline">
+            <label class="form-label">priority</label>
+            <select class="form-select" v-model="form.priority">
+              <option value="low">low</option>
+              <option value="middle">middle</option>
+              <option value="high">high</option>
+            </select>
+          </div>
+          <div class="form-inline">
+            <label class="form-label">executeScope</label>
+            <select class="form-select" v-model="form.executeScope">
+              <option value="any">any</option>
+              <option value="all">all</option>
+            </select>
+          </div>
+        </div>
+        <label class="form-inline-check">
           <input type="checkbox" v-model="form.useIdempotent"/>
-          useIdempotent
+          useIdempotent（幂等，避免重复启动）
         </label>
       </div>
-    </div>
 
-    <div style="display:flex;gap:10px;margin-bottom:16px">
-      <button class="btn btn-primary" :disabled="busy" @click="startJob">启动</button>
-      <button class="btn btn-ghost" :disabled="busy || !jobUuid" @click="refreshStatus">刷新状态</button>
-    </div>
+      <div style="display:flex;gap:10px;margin-bottom:16px">
+        <button class="btn btn-primary" :disabled="busy" @click="startJob">启动</button>
+        <button class="btn btn-ghost" :disabled="busy || !jobUuid" @click="refreshStatus">刷新状态</button>
+      </div>
 
-    <div class="card">
-      <div class="card-header"><div class="card-title">结果</div></div>
-      <div v-if="hint" style="color:var(--c-red);font-size:13px;margin-bottom:12px;font-weight:500">{{hint}}</div>
-      <div class="form-group">
-        <label class="form-label">jobUuid</label>
-        <div style="font-family:monospace;font-size:13px">{{jobUuid || '—'}}</div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">status / statusName</label>
-        <div style="font-size:13px">{{statusText}}</div>
-      </div>
-      <div class="form-group" style="margin-bottom:0">
-        <label class="form-label">原始响应</label>
-        <pre class="log-response">{{rawJson || '(无)'}}</pre>
+      <div class="card">
+        <div class="card-header"><div class="card-title">结果</div></div>
+        <div v-if="hint" style="color:var(--c-red);font-size:13px;margin-bottom:12px;font-weight:500">{{hint}}</div>
+        <div class="form-inline">
+          <label class="form-label">jobUuid</label>
+          <div style="font-family:monospace;font-size:13px;word-break:break-all">{{jobUuid || '—'}}</div>
+        </div>
+        <div class="form-inline">
+          <label class="form-label">状态</label>
+          <div style="font-size:13px">{{statusText}}</div>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">原始响应</label>
+          <pre class="log-response">{{rawJson || '(无)'}}</pre>
+        </div>
       </div>
     </div>
   </div>`,
