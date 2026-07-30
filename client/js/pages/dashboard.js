@@ -11,19 +11,9 @@ export default {
       </div>
     </div>
     <div class="card">
-      <div class="card-header">
-        <span class="card-title">执行日志</span>
-        <span style="font-size:12px;color:#86909c">共 {{total}} 条</span>
-      </div>
       <div class="toolbar">
         <input class="search-input" v-model="keyword" placeholder="搜索路径或接口名..." @keyup.enter="search" />
         <button class="btn btn-primary btn-sm" @click="search">搜索</button>
-        <select class="form-select" v-model.number="pageSize" style="width:110px;margin-left:auto">
-          <option :value="20">20 / 页</option>
-          <option :value="50">50 / 页</option>
-          <option :value="100">100 / 页</option>
-          <option :value="200">200 / 页</option>
-        </select>
       </div>
       <div v-if="loading" class="empty-state"><p>加载中...</p></div>
       <div v-else-if="!logs.length" class="empty-state"><div class="empty-state-icon">📋</div><p>暂无调用记录，前往「调度任务」执行 API</p></div>
@@ -45,6 +35,12 @@ export default {
         </table>
       </div>
       <div v-if="totalPages>1 || total>0" class="pagination">
+        <select class="form-select" v-model.number="pageSize" style="width:110px">
+          <option :value="20">20 / 页</option>
+          <option :value="50">50 / 页</option>
+          <option :value="100">100 / 页</option>
+          <option :value="200">200 / 页</option>
+        </select>
         <button class="btn btn-ghost btn-sm" :disabled="page<=1" @click="page--">上一页</button>
         <span class="pagination-info">第 {{page}} / {{totalPages||1}} 页</span>
         <button class="btn btn-ghost btn-sm" :disabled="page>=totalPages" @click="page++">下一页</button>
