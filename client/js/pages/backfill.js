@@ -22,11 +22,11 @@ export default {
         <input class="form-input" v-model="form.robotUuid" placeholder="应用 UUID"/>
       </div>
       <div class="form-group">
-        <label class="form-label">accountName</label>
+        <label class="form-label">accountName <span style="color:var(--c-sub);font-weight:400;font-size:12px">条件必填</span></label>
         <input class="form-input" v-model="form.accountName" placeholder="执行账号名"/>
       </div>
       <div class="form-group">
-        <label class="form-label">robotClientGroupUuid</label>
+        <label class="form-label">robotClientGroupUuid <span style="color:var(--c-sub);font-weight:400;font-size:12px">条件必填</span></label>
         <input class="form-input" v-model="form.robotClientGroupUuid" placeholder="机器人分组 UUID"/>
         <div class="cron-helper">账号与分组二选一，都填以分组为准</div>
       </div>
