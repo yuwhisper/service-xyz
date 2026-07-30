@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from server.jushuitan.client import (
     create_lwh_allocation,
+    create_lwh_operation,
     fetch_token_info,
     get_lwh_by_name,
     query_inventory_by_sku,
@@ -163,6 +164,51 @@ class AllocationCreateBody(BaseModel):
         raise ValueError("items 必须是数组")
 
 
+class LwhOperationCreateBody(BaseModel):
+    lwh: str = Field(..., description="虚拟仓：中文名或数字 id")
+    type: str = Field(..., description="虚拟仓分配 / 虚拟仓归还")
+    items: list[Any] = Field(..., description="明细 [{sku_id, qty?}]，qty 空或0取可用数")
+    wms: str | None = Field(
+        default=None,
+        description="实体仓：中文名或 id；该虚拟仓仅绑定1个实体仓时可空",
+    )
+    so_id: str | None = Field(
+        default=None,
+        description="外部单号；空则自动生成日期时分秒毫秒",
+    )
+    remark: str | None = Field(default=None, description="备注")
+    examine: bool = Field(default=False, description="是否审核生效")
+    isIgnore_check_stock: bool | None = Field(
+        default=None,
+        description="是否允许超锁；仅 examine=true 时有效",
+    )
+
+    @field_validator("items", mode="before")
+    @classmethod
+    def _parse_op_items(cls, value: Any) -> list[Any]:
+        if value is None or value == "":
+            raise ValueError("items 为必填数组")
+        if isinstance(value, list):
+            return value
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                raise ValueError("items 为必填数组")
+            parsed = json.loads(text)
+            if not isinstance(parsed, list):
+                raise ValueError("items 必须是 JSON 数组")
+            return parsed
+        raise ValueError("items 必须是数组")
+
+    @field_validator("type")
+    @classmethod
+    def _check_type(cls, value: str) -> str:
+        text = str(value or "").strip()
+        if text not in ("虚拟仓分配", "虚拟仓归还"):
+            raise ValueError("type 必须是「虚拟仓分配」或「虚拟仓归还」")
+        return text
+
+
 @router.get("/gettoken")
 async def get_token_get(
     force: bool = Query(False, description="忽略缓存重新换取"),
@@ -262,6 +308,20 @@ async def create_allocation_post(body: AllocationCreateBody):
         remark=body.remark,
         items=body.items,
         examine=body.examine,
+    )
+
+
+@router.post("/lwh/operation/create")
+async def create_operation_post(body: LwhOperationCreateBody):
+    return await _create_operation(
+        lwh=body.lwh,
+        op_type=body.type,
+        items=body.items,
+        wms=body.wms,
+        so_id=body.so_id,
+        remark=body.remark,
+        examine=body.examine,
+        is_ignore_check_stock=body.isIgnore_check_stock,
     )
 
 
@@ -463,6 +523,119 @@ async def _create_allocation(
                     out_lwh=out_lwh,
                     in_lwh=in_lwh,
                     wms=wms,
+                    remark=remark,
+                    items=items,
+                    reason=str(e),
+                ),
+            },
+        )
+
+
+def _operation_fail_rows(
+    *,
+    lwh: Any,
+    wms: Any,
+    op_type: str,
+    remark: str | None,
+    items: list[Any],
+    reason: str,
+) -> list[list[Any]]:
+    """失败二维列表：虚拟仓,实体仓,类型,SKU,数量,备注,失败原因。"""
+    reason_text = str(reason or "").strip()
+    lwh_text = "" if lwh is None else str(lwh).strip()
+    wms_text = "" if wms is None else str(wms).strip()
+    type_text = "" if op_type is None else str(op_type).strip()
+    remark_text = "" if remark is None else str(remark).strip()
+
+    rows: list[list[Any]] = []
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        sku_id = str(item.get("sku_id") or "").strip()
+        qty = item.get("qty")
+        qty_val: Any = "" if qty is None or str(qty).strip() == "" else qty
+        rows.append([
+            lwh_text,
+            wms_text,
+            type_text,
+            sku_id,
+            qty_val,
+            remark_text,
+            reason_text,
+        ])
+    if not rows:
+        rows.append([
+            lwh_text,
+            wms_text,
+            type_text,
+            "",
+            "",
+            remark_text,
+            reason_text,
+        ])
+    return rows
+
+
+async def _create_operation(
+    *,
+    lwh: Any,
+    op_type: str,
+    items: list[Any],
+    wms: Any = None,
+    so_id: str | None = None,
+    remark: str | None = None,
+    examine: bool = False,
+    is_ignore_check_stock: bool | None = None,
+):
+    try:
+        data = await asyncio.to_thread(
+            create_lwh_operation,
+            lwh=lwh,
+            op_type=op_type,
+            items=items,
+            wms=wms,
+            so_id=so_id,
+            remark=remark,
+            examine=examine,
+            is_ignore_check_stock=is_ignore_check_stock,
+        )
+        return {"code": 0, "data": data}
+    except ValueError as e:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "detail": _operation_fail_rows(
+                    lwh=lwh,
+                    wms=wms,
+                    op_type=op_type,
+                    remark=remark,
+                    items=items,
+                    reason=str(e),
+                ),
+            },
+        )
+    except RuntimeError as e:
+        return JSONResponse(
+            status_code=502,
+            content={
+                "detail": _operation_fail_rows(
+                    lwh=lwh,
+                    wms=wms,
+                    op_type=op_type,
+                    remark=remark,
+                    items=items,
+                    reason=str(e),
+                ),
+            },
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": _operation_fail_rows(
+                    lwh=lwh,
+                    wms=wms,
+                    op_type=op_type,
                     remark=remark,
                     items=items,
                     reason=str(e),

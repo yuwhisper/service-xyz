@@ -13,6 +13,9 @@ WAREHOUSE_LIST_PATH = "/open/webapi/itemapi/lockwarehouse/getwarehouselist"
 LWH_ALLOCATION_CREATE_PATH = (
     "/open/webapi/itemapi/lockwarehouse/lwhallocationcreate"
 )
+LWH_OPERATION_CREATE_PATH = (
+    "/open/webapi/itemapi/lockwarehouse/lwhoperationcreate"
+)
 INIT_TOKEN_PATH = "/openWeb/auth/getInitToken"
 ACCESS_TOKEN_PATH = "/openWeb/auth/accessToken"
 REFRESH_TOKEN_PATH = "/openWeb/auth/refreshToken"

@@ -19,6 +19,7 @@ from server.jushuitan.config import (
     INIT_TOKEN_PATH,
     INVENTORY_QUERY_PATH,
     LWH_ALLOCATION_CREATE_PATH,
+    LWH_OPERATION_CREATE_PATH,
     OPENAPI_BASE,
     ORDER_QUERY_PATH,
     REFRESH_TOKEN_PATH,
@@ -770,4 +771,80 @@ def create_lwh_allocation(
         "out_lwh_id": int(out_id),
         "in_lwh_id": int(in_id),
         "wms_co_id": int(wms_co_id),
+    }
+
+
+def next_operation_so_id() -> str:
+    """外部单号：当天日期 + 时分秒毫秒。"""
+    return datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]
+
+
+def create_lwh_operation(
+    *,
+    lwh: Any,
+    op_type: str,
+    items: list[Any],
+    wms: Any = None,
+    so_id: str | None = None,
+    remark: str | None = None,
+    examine: bool = False,
+    is_ignore_check_stock: bool | None = None,
+) -> dict[str, Any]:
+    """
+    Create virtual-warehouse allocate/return (lwhoperationcreate).
+    Returns {io_id, so_id, lwh_id, wms_co_id, type}.
+    """
+    type_text = str(op_type or "").strip()
+    if type_text not in ("虚拟仓分配", "虚拟仓归还"):
+        raise ValueError("type 必须是「虚拟仓分配」或「虚拟仓归还」")
+
+    warehouses = list_lock_warehouses()
+    lwh_id, wh = _resolve_lwh(
+        lwh,
+        warehouses,
+        label="虚拟仓",
+        not_found_prefix="查不到虚拟仓",
+    )
+    # 单仓场景：把同一仓作为 out/in 传入，复用实体仓解析
+    wms_co_id = _resolve_wms_co_id(wms, wh, wh)
+    item_list = _normalize_allocation_items(items)
+    so = str(so_id or "").strip() or next_operation_so_id()
+
+    biz_data: dict[str, Any] = {
+        "lwh_id": int(lwh_id),
+        "wms_co_id": int(wms_co_id),
+        "so_id": so,
+        "type": type_text,
+        "items": item_list,
+        "examine": bool(examine),
+    }
+    rem = str(remark or "").strip()
+    if rem:
+        biz_data["remark"] = rem
+    if is_ignore_check_stock is not None:
+        biz_data["isIgnore_check_stock"] = bool(is_ignore_check_stock)
+
+    try:
+        result = _post_biz(LWH_OPERATION_CREATE_PATH, biz_data)
+    except RuntimeError as e:
+        raise ValueError(f"创建失败：{e}") from e
+
+    if result.get("code") != 0:
+        raise ValueError(
+            f"创建失败：[{result.get('code')}] {result.get('msg') or result}"
+        )
+
+    data = result.get("data") or {}
+    if isinstance(data, dict) and data.get("code") not in (None, 0, "0"):
+        raise ValueError(
+            f"创建失败：[{data.get('code')}] {data.get('msg') or data}"
+        )
+
+    io_id = data.get("io_id") if isinstance(data, dict) else None
+    return {
+        "io_id": io_id,
+        "so_id": so,
+        "lwh_id": int(lwh_id),
+        "wms_co_id": int(wms_co_id),
+        "type": type_text,
     }

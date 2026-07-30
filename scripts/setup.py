@@ -187,6 +187,13 @@ async def setup():
             "json",
         ),
         (
+            "聚水潭创建虚拟仓分配归还单",
+            "虚拟仓分配/归还（入库退货）；失败 detail 为二维列表",
+            "POST",
+            "/service/zyx/jst/lwh/operation/create",
+            "json",
+        ),
+        (
             "影刀启动应用",
             "每日数据补全：启动影刀应用（Key在服务端）",
             "POST",

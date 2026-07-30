@@ -153,6 +153,7 @@ python server/main.py
 | GET/POST | `/jst/inventory/query` | 按 `sku` + `wms_co_ids` 查分仓库存 |
 | GET/POST | `/jst/lwh/query` | 按中文虚拟仓名精确匹配，返回 `{ lwh_id, bind_wms }` |
 | POST | `/jst/lwh/allocation/create` | 创建虚拟仓调拨单；校验调出/调入/实体仓/SKU/库存，详细中文报错 |
+| POST | `/jst/lwh/operation/create` | 创建虚拟仓分配/归还单；失败 detail 为二维列表 |
 | POST | `/yingdao/job/start` | 启动影刀应用；Key 在服务端，返回 `jobUuid` |
 | POST | `/yingdao/job/query` | 按 `jobUuid` 查询影刀任务状态 |
 
@@ -197,6 +198,7 @@ Content-Type: application/json
 - 库存：`POST /jst/inventory/query`，body `{ "sku": "...", "wms_co_ids": [分仓编号, ...] }`；空列表表示所有仓总库存
 - 虚拟仓：`POST /jst/lwh/query`，body `{ "name": "TEMU仓" }` → `{ "code": 0, "data": { "lwh_id": ..., "bind_wms": [{ "wms_co_id", "wms_name" }] } }`
 - 虚拟仓调拨创建：`POST /jst/lwh/allocation/create`，body `{ out_lwh, in_lwh, wms?, so_id?, remark, items, examine? }`；创建前校验仓/SKU/库存，失败 detail 含「查不到调出云仓」等中文
+- 虚拟仓分配/归还：`POST /jst/lwh/operation/create`，body `{ lwh, type, items, wms?, so_id?, remark?, examine?, isIgnore_check_stock? }`；`type` 为「虚拟仓分配」或「虚拟仓归还」；失败 detail 为二维列表 `[虚拟仓,实体仓,类型,SKU,数量,备注,失败原因]`
 
 ### 影刀（`server/yingdao/`）
 
@@ -241,6 +243,7 @@ Content-Type: application/json
 | 聚水潭查询商品库存 | POST | `/service/zyx/jst/inventory/query` | json |
 | 聚水潭按名称查虚拟仓ID | POST | `/service/zyx/jst/lwh/query` | json |
 | 聚水潭创建虚拟仓调拨单 | POST | `/service/zyx/jst/lwh/allocation/create` | json |
+| 聚水潭创建虚拟仓分配归还单 | POST | `/service/zyx/jst/lwh/operation/create` | json |
 | 影刀启动应用 | POST | `/service/zyx/yingdao/job/start` | json |
 | 影刀查询Job状态 | POST | `/service/zyx/yingdao/job/query` | json |
 
