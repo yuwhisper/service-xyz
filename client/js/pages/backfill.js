@@ -1,10 +1,35 @@
-import { ref, reactive, computed, inject } from 'vue';
+import { ref, reactive, inject, onMounted } from 'vue';
 
 function errHint(e) {
   const detail = e?.response?.data?.detail;
   if (detail && typeof detail === 'object') return detail.hint || JSON.stringify(detail);
   if (detail != null) return String(detail);
   return e?.message || '请求失败';
+}
+
+function statusClass(status) {
+  const s = String(status || '').toLowerCase();
+  if (s.includes('run') || s === 'waiting' || s === 'queued') return 'st-running';
+  if (s.includes('finish') || s === 'success' || s === 'done') return 'st-done';
+  if (s.includes('error') || s.includes('fail') || s.includes('cancel')) return 'st-fail';
+  return 'st-running';
+}
+
+function statusLabel(row) {
+  if (row.statusName) return row.statusName;
+  const s = String(row.status || '').toLowerCase();
+  if (s === 'waiting') return '等待调度';
+  if (s === 'running') return '运行中';
+  if (s === 'finish' || s === 'finished') return '完成';
+  if (s === 'error' || s === 'failed') return '失败';
+  return row.status || '—';
+}
+
+function durationText(sec) {
+  if (sec == null || sec === '') return '—';
+  const n = Number(sec);
+  if (Number.isNaN(n)) return '—';
+  return `${n}秒`;
 }
 
 export default {
@@ -15,92 +40,120 @@ export default {
       <p>Key 在服务端 .env，本页不展示密钥</p>
     </div>
 
-    <div class="form-compact">
-      <div class="card">
-        <div class="card-header"><div class="card-title">调度目标</div></div>
-        <div class="form-inline">
-          <label class="form-label">robotUuid<span class="form-req">*</span></label>
-          <input class="form-input" v-model="form.robotUuid" placeholder="应用 UUID"/>
+    <div class="card backfill-form-card">
+      <div class="backfill-params">
+        <div class="backfill-field">
+          <label>应用UUID<span class="form-req">*</span></label>
+          <input class="form-input" v-model="form.robotUuid" placeholder="robotUuid"/>
         </div>
-        <div class="form-inline">
-          <label class="form-label">accountName</label>
-          <input class="form-input" v-model="form.accountName" placeholder="账号（与分组二选一）"/>
+        <div class="backfill-field">
+          <label>机器人名称</label>
+          <input class="form-input" v-model="form.accountName" placeholder="与分组二选一"/>
         </div>
-        <div class="form-inline">
-          <label class="form-label">分组 UUID</label>
-          <input class="form-input" v-model="form.robotClientGroupUuid" placeholder="都填时以分组为准"/>
+        <div class="backfill-field">
+          <label>机器人分组</label>
+          <input class="form-input" v-model="form.robotClientGroupUuid" placeholder="都填以分组为准"/>
+        </div>
+        <div class="backfill-field backfill-field-sm">
+          <label>开始日期</label>
+          <input class="form-input" type="date" v-model="form.startDate"/>
+        </div>
+        <div class="backfill-field backfill-field-sm">
+          <label>结束日期</label>
+          <input class="form-input" type="date" v-model="form.endDate"/>
+        </div>
+        <div class="backfill-field backfill-field-sm">
+          <label>排队超时(秒)</label>
+          <input class="form-input" type="number" v-model="form.waitTimeoutSeconds"/>
+        </div>
+        <div class="backfill-field backfill-field-sm">
+          <label>运行超时(秒)</label>
+          <input class="form-input" type="number" v-model="form.runTimeout" placeholder="空=不限"/>
+        </div>
+        <div class="backfill-field backfill-field-sm">
+          <label>priority</label>
+          <select class="form-select" v-model="form.priority">
+            <option value="low">low</option>
+            <option value="middle">middle</option>
+            <option value="high">high</option>
+          </select>
+        </div>
+        <div class="backfill-field backfill-field-sm">
+          <label>executeScope</label>
+          <select class="form-select" v-model="form.executeScope">
+            <option value="any">any</option>
+            <option value="all">all</option>
+          </select>
+        </div>
+        <div class="backfill-field backfill-field-check">
+          <label class="backfill-check">
+            <input type="checkbox" v-model="form.useIdempotent"/>
+            幂等
+          </label>
+        </div>
+        <div class="backfill-field backfill-field-actions">
+          <button class="btn btn-primary" :disabled="busy" @click="startJob">启动</button>
+          <button class="btn btn-ghost" :disabled="busy" @click="loadJobs">刷新列表</button>
         </div>
       </div>
+      <div v-if="hint" class="backfill-hint">{{hint}}</div>
+    </div>
 
-      <div class="card">
-        <div class="card-header"><div class="card-title">应用参数</div></div>
-        <div class="form-grid-2">
-          <div class="form-inline">
-            <label class="form-label">开始日期</label>
-            <input class="form-input" type="date" v-model="form.startDate"/>
-          </div>
-          <div class="form-inline">
-            <label class="form-label">结束日期</label>
-            <input class="form-input" type="date" v-model="form.endDate"/>
-          </div>
-        </div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">执行记录</div>
+        <span style="font-size:12px;color:var(--c-sub)">共 {{jobs.length}} 条</span>
       </div>
-
-      <div class="card">
-        <div class="card-header"><div class="card-title">可选调度</div></div>
-        <div class="form-grid-2">
-          <div class="form-inline">
-            <label class="form-label">排队超时(秒)</label>
-            <input class="form-input" type="number" v-model="form.waitTimeoutSeconds" placeholder="600"/>
-          </div>
-          <div class="form-inline">
-            <label class="form-label">运行超时(秒)</label>
-            <input class="form-input" type="number" v-model="form.runTimeout" placeholder="空=不限制"/>
-          </div>
-          <div class="form-inline">
-            <label class="form-label">priority</label>
-            <select class="form-select" v-model="form.priority">
-              <option value="low">low</option>
-              <option value="middle">middle</option>
-              <option value="high">high</option>
-            </select>
-          </div>
-          <div class="form-inline">
-            <label class="form-label">executeScope</label>
-            <select class="form-select" v-model="form.executeScope">
-              <option value="any">any</option>
-              <option value="all">all</option>
-            </select>
-          </div>
-        </div>
-        <label class="form-inline-check">
-          <input type="checkbox" v-model="form.useIdempotent"/>
-          useIdempotent（幂等，避免重复启动）
-        </label>
-      </div>
-
-      <div style="display:flex;gap:10px;margin-bottom:16px">
-        <button class="btn btn-primary" :disabled="busy" @click="startJob">启动</button>
-        <button class="btn btn-ghost" :disabled="busy || !jobUuid" @click="refreshStatus">刷新状态</button>
-      </div>
-
-      <div class="card">
-        <div class="card-header"><div class="card-title">结果</div></div>
-        <div v-if="hint" style="color:var(--c-red);font-size:13px;margin-bottom:12px;font-weight:500">{{hint}}</div>
-        <div class="form-inline">
-          <label class="form-label">jobUuid</label>
-          <div style="font-family:monospace;font-size:13px;word-break:break-all">{{jobUuid || '—'}}</div>
-        </div>
-        <div class="form-inline">
-          <label class="form-label">状态</label>
-          <div style="font-size:13px">{{statusText}}</div>
-        </div>
-        <div class="form-group" style="margin-bottom:0">
-          <label class="form-label">原始响应</label>
-          <pre class="log-response">{{rawJson || '(无)'}}</pre>
-        </div>
+      <div v-if="loadingList" class="empty-state"><p>加载中...</p></div>
+      <div v-else-if="!jobs.length" class="empty-state"><p>暂无执行记录，填写参数后点击「启动」</p></div>
+      <div v-else class="table-wrap">
+        <table class="backfill-jobs-table">
+          <thead>
+            <tr>
+              <th>任务名称</th>
+              <th>状态</th>
+              <th>触发时间</th>
+              <th>运行时长</th>
+              <th>触发账号</th>
+              <th>备注</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in jobs" :key="row.jobUuid || row.id">
+              <td>
+                <div class="backfill-task-name">{{row.taskName || '每日数据补全'}}</div>
+                <div class="backfill-job-id">{{row.jobUuid}}</div>
+              </td>
+              <td>
+                <span :class="['backfill-status', statusClass(row.status)]">{{statusLabel(row)}}</span>
+              </td>
+              <td class="nowrap">{{row.createdAt || '—'}}</td>
+              <td>{{durationText(row.durationSec)}}</td>
+              <td>{{row.accountName || row.groupUuid || '—'}}</td>
+              <td class="backfill-remark">{{row.remark || '—'}}</td>
+              <td class="nowrap">
+                <button class="btn btn-ghost btn-sm" :disabled="busy" @click="refreshRow(row)">刷新</button>
+                <button class="btn btn-ghost btn-sm" @click="showDetail(row)">详情</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
+
+    <modal-box title="执行详情" :visible="!!detail" @close="detail=null" :wide="true">
+      <div v-if="detail" style="display:grid;grid-template-columns:1fr 1fr;gap:12px 24px;margin-bottom:16px">
+        <div><span style="color:#86909c;font-size:12px">任务</span><div style="font-weight:500">{{detail.taskName}}</div></div>
+        <div><span style="color:#86909c;font-size:12px">状态</span><div>{{statusLabel(detail)}}</div></div>
+        <div><span style="color:#86909c;font-size:12px">jobUuid</span><div style="font-family:monospace;font-size:12px;word-break:break-all">{{detail.jobUuid}}</div></div>
+        <div><span style="color:#86909c;font-size:12px">触发时间</span><div>{{detail.createdAt || '—'}}</div></div>
+        <div><span style="color:#86909c;font-size:12px">账号/分组</span><div>{{detail.accountName || detail.groupUuid || '—'}}</div></div>
+        <div><span style="color:#86909c;font-size:12px">运行时长</span><div>{{durationText(detail.durationSec)}}</div></div>
+      </div>
+      <div class="form-label" style="margin-bottom:6px">备注</div>
+      <div style="margin-bottom:12px;font-size:13px">{{detail?.remark || '—'}}</div>
+    </modal-box>
   </div>`,
   setup() {
     const http = inject('http');
@@ -120,35 +173,34 @@ export default {
     });
 
     const busy = ref(false);
-    const jobUuid = ref('');
+    const loadingList = ref(false);
     const hint = ref('');
-    const status = ref('');
-    const statusName = ref('');
-    const rawJson = ref('');
+    const jobs = ref([]);
+    const detail = ref(null);
 
-    const statusText = computed(() => {
-      if (!status.value && !statusName.value) return '—';
-      return `${status.value || '—'}${statusName.value ? ' / ' + statusName.value : ''}`;
-    });
-
-    function applyResult(data) {
-      const d = data || {};
-      if (d.jobUuid) jobUuid.value = d.jobUuid;
-      if (d.status != null) status.value = d.status;
-      if (d.statusName != null) statusName.value = d.statusName;
-      rawJson.value = JSON.stringify(d, null, 2);
+    async function loadJobs() {
+      loadingList.value = true;
+      try {
+        const { data } = await http.get('/service/zyx/yingdao/jobs?limit=50');
+        jobs.value = data?.data?.items || [];
+      } catch (e) {
+        jobs.value = [];
+        show(errHint(e), 'error');
+      } finally {
+        loadingList.value = false;
+      }
     }
 
     async function startJob() {
       const robotUuid = (form.robotUuid || '').trim();
       if (!robotUuid) {
-        show('请填写 robotUuid', 'error');
+        show('请填写应用UUID', 'error');
         return;
       }
       const accountName = (form.accountName || '').trim();
       const robotClientGroupUuid = (form.robotClientGroupUuid || '').trim();
       if (!accountName && !robotClientGroupUuid) {
-        show('请填写 accountName 或 robotClientGroupUuid', 'error');
+        show('请填写机器人名称或机器人分组', 'error');
         return;
       }
 
@@ -169,6 +221,7 @@ export default {
         priority: form.priority,
         executeScope: form.executeScope,
         useIdempotent: !!form.useIdempotent,
+        taskName: '每日数据补全',
       };
       const rt = form.runTimeout === '' || form.runTimeout == null ? null : Number(form.runTimeout);
       if (rt != null && !Number.isNaN(rt)) body.runTimeout = rt;
@@ -176,11 +229,9 @@ export default {
       busy.value = true;
       hint.value = '';
       try {
-        const { data } = await http.post('/service/zyx/yingdao/job/start', body);
-        const payload = data?.data ?? data;
-        applyResult(payload);
-        if (payload?.jobUuid) jobUuid.value = payload.jobUuid;
+        await http.post('/service/zyx/yingdao/job/start', body);
         show('启动成功');
+        await loadJobs();
       } catch (e) {
         hint.value = errHint(e);
         show(hint.value, 'error');
@@ -189,14 +240,13 @@ export default {
       }
     }
 
-    async function refreshStatus() {
-      if (!jobUuid.value) return;
+    async function refreshRow(row) {
+      if (!row?.jobUuid) return;
       busy.value = true;
       hint.value = '';
       try {
-        const { data } = await http.post('/service/zyx/yingdao/job/query', { jobUuid: jobUuid.value });
-        const payload = data?.data ?? data;
-        applyResult(payload);
+        await http.post('/service/zyx/yingdao/job/query', { jobUuid: row.jobUuid });
+        await loadJobs();
         show('状态已刷新');
       } catch (e) {
         hint.value = errHint(e);
@@ -206,6 +256,16 @@ export default {
       }
     }
 
-    return { form, busy, jobUuid, hint, rawJson, statusText, startJob, refreshStatus };
+    function showDetail(row) {
+      detail.value = row;
+    }
+
+    onMounted(loadJobs);
+
+    return {
+      form, busy, loadingList, hint, jobs, detail,
+      startJob, loadJobs, refreshRow, showDetail,
+      statusClass, statusLabel, durationText,
+    };
   }
 };

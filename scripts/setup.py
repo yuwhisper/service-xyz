@@ -46,6 +46,29 @@ async def setup():
     """)
     print("[setup] schedules table ready")
 
+    await execute("""
+        CREATE TABLE IF NOT EXISTS yingdao_jobs (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            job_uuid VARCHAR(64) NOT NULL,
+            task_name VARCHAR(200) NOT NULL DEFAULT '每日数据补全',
+            robot_uuid VARCHAR(64) NOT NULL DEFAULT '',
+            account_name VARCHAR(120) NOT NULL DEFAULT '',
+            group_uuid VARCHAR(64) NOT NULL DEFAULT '',
+            status VARCHAR(40) NOT NULL DEFAULT 'waiting',
+            status_name VARCHAR(80) NOT NULL DEFAULT '已提交',
+            remark VARCHAR(500) NOT NULL DEFAULT '',
+            duration_sec INT NULL,
+            started_at DATETIME NULL,
+            finished_at DATETIME NULL,
+            raw_json MEDIUMTEXT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_job_uuid (job_uuid),
+            INDEX idx_created (created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """)
+    print("[setup] yingdao_jobs table ready")
+
     # Ensure admin user exists
     admin = await execute_one("SELECT id FROM users WHERE email=%s", ("admin@service-xyz.com",))
     if not admin:

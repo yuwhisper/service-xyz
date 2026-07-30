@@ -104,6 +104,26 @@ tbody tr:hover{background:#fafbfc}
 .form-inline-check{display:flex;align-items:center;gap:8px;margin:4px 0 8px 128px;font-size:13px}
 .form-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 @media(max-width:720px){.form-grid-2{grid-template-columns:1fr}.form-inline{flex-wrap:wrap}.form-inline .form-label{min-width:100%}.form-inline-check{margin-left:0}}
+
+.backfill-form-card{padding:16px 18px}
+.backfill-params{display:flex;flex-wrap:wrap;gap:10px 12px;align-items:flex-end}
+.backfill-field{display:flex;flex-direction:column;gap:4px;min-width:160px;flex:1 1 160px}
+.backfill-field>label{font-size:12px;font-weight:600;color:var(--c-sub)}
+.backfill-field-sm{flex:0 1 140px;min-width:120px}
+.backfill-field-check{flex:0 0 auto;min-width:auto;justify-content:flex-end;padding-bottom:8px}
+.backfill-field-actions{flex:0 0 auto;min-width:auto;flex-direction:row;gap:8px;padding-bottom:1px}
+.backfill-check{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--c-text);cursor:pointer}
+.backfill-hint{margin-top:10px;color:var(--c-red);font-size:13px;font-weight:500}
+.backfill-jobs-table{font-size:13px}
+.backfill-jobs-table th{text-transform:none;letter-spacing:0}
+.backfill-task-name{font-weight:500;color:var(--c-text)}
+.backfill-job-id{font-family:monospace;font-size:11px;color:var(--c-sub);margin-top:2px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.backfill-remark{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--c-sub)}
+.backfill-status{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:500;line-height:1.5}
+.backfill-status.st-running{background:#e8f3ff;color:#165dff}
+.backfill-status.st-done{background:var(--c-green-bg);color:var(--c-green)}
+.backfill-status.st-fail{background:var(--c-red-bg);color:var(--c-red)}
+.nowrap{white-space:nowrap}
 .form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--c-blue);box-shadow:0 0 0 3px rgba(22,93,255,.08)}
 .form-textarea{resize:vertical;min-height:80px}
 .form-input::placeholder{color:#c9cdd4}
