@@ -38,6 +38,7 @@ CLIENT = Path(__file__).resolve().parent.parent / "client"
 if CLIENT.exists():
     app.mount("/js", StaticFiles(directory=CLIENT / "js"), name="js")
     app.mount("/css", StaticFiles(directory=CLIENT / "css"), name="css")
+    app.mount("/img", StaticFiles(directory=CLIENT / "img"), name="img")
 
     # Serve root-level static files (index.html, test.html, favicon, etc.)
     @app.get("/{filename:path}")

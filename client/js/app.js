@@ -11,7 +11,7 @@ const pages = { dashboard: Dashboard };
 async function loadPage(name) {
   if (pages[name]) return pages[name];
   // 版本参数避免浏览器长期缓存旧页面模块（如接口参数文档）
-  const m = await import(`./pages/${name}.js?v=20260730a`);
+  const m = await import(`./pages/${name}.js?v=20260730b`);
   pages[name] = m.default;
   return m.default;
 }
@@ -27,7 +27,8 @@ const sidebar = {
       <div v-for="item in items" :key="item.key"
         :class="['sidebar-item',{active:active===item.key}]"
         @click="$emit('nav',item.key)">
-        <span class="sidebar-item-icon">{{item.icon}}</span>
+        <img v-if="item.iconImg" class="sidebar-item-icon-img" :src="item.iconImg" alt="" />
+        <span v-else class="sidebar-item-icon">{{item.icon}}</span>
         <span>{{item.label}}</span>
         <span class="nav-dot"></span>
       </div>
@@ -42,6 +43,7 @@ const sidebar = {
       { key: 'dashboard', label: '数据中心', icon: '📊' },
       { key: 'dispatch', label: '调度任务', icon: '⚡' },
       { key: 'schedule', label: '定时任务', icon: '⏰' },
+      { key: 'backfill', label: '每日数据补全', iconImg: '/img/yingdao.svg' },
     ]};
   }
 };
