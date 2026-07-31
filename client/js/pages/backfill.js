@@ -47,12 +47,8 @@ export default {
           <input class="form-input" v-model="form.robotUuid" placeholder="robotUuid"/>
         </div>
         <div class="backfill-field">
-          <label>机器人名称</label>
-          <input class="form-input" v-model="form.accountName" placeholder="与分组二选一"/>
-        </div>
-        <div class="backfill-field">
-          <label>机器人分组</label>
-          <input class="form-input" v-model="form.robotClientGroupUuid" placeholder="都填以分组为准"/>
+          <label>机器人名称<span class="form-req">*</span></label>
+          <input class="form-input" v-model="form.accountName" placeholder="控制台机器人账号"/>
         </div>
         <div class="backfill-field backfill-field-sm">
           <label>开始日期</label>
@@ -71,25 +67,12 @@ export default {
           <input class="form-input" type="number" v-model="form.runTimeout" placeholder="空=不限"/>
         </div>
         <div class="backfill-field backfill-field-sm">
-          <label>priority</label>
+          <label>优先级</label>
           <select class="form-select" v-model="form.priority">
-            <option value="low">low</option>
-            <option value="middle">middle</option>
-            <option value="high">high</option>
+            <option value="high">高</option>
+            <option value="middle">中</option>
+            <option value="low">低</option>
           </select>
-        </div>
-        <div class="backfill-field backfill-field-sm">
-          <label>executeScope</label>
-          <select class="form-select" v-model="form.executeScope">
-            <option value="any">any</option>
-            <option value="all">all</option>
-          </select>
-        </div>
-        <div class="backfill-field backfill-field-check">
-          <label class="backfill-check">
-            <input type="checkbox" v-model="form.useIdempotent"/>
-            幂等
-          </label>
         </div>
         <div class="backfill-field backfill-field-actions">
           <button class="btn btn-primary" :disabled="busy" @click="startJob">启动</button>
@@ -130,7 +113,7 @@ export default {
               </td>
               <td class="nowrap">{{row.createdAt || '—'}}</td>
               <td>{{durationText(row.durationSec)}}</td>
-              <td>{{row.accountName || row.groupUuid || '—'}}</td>
+              <td>{{row.accountName || '—'}}</td>
               <td class="backfill-remark">{{row.remark || '—'}}</td>
               <td class="nowrap">
                 <button class="btn btn-ghost btn-sm" :disabled="busy" @click="refreshRow(row)">刷新</button>
@@ -148,7 +131,7 @@ export default {
         <div><span style="color:#86909c;font-size:12px">状态</span><div>{{statusLabel(detail)}}</div></div>
         <div><span style="color:#86909c;font-size:12px">jobUuid</span><div style="font-family:monospace;font-size:12px;word-break:break-all">{{detail.jobUuid}}</div></div>
         <div><span style="color:#86909c;font-size:12px">触发时间</span><div>{{detail.createdAt || '—'}}</div></div>
-        <div><span style="color:#86909c;font-size:12px">账号/分组</span><div>{{detail.accountName || detail.groupUuid || '—'}}</div></div>
+        <div><span style="color:#86909c;font-size:12px">触发账号</span><div>{{detail.accountName || '—'}}</div></div>
         <div><span style="color:#86909c;font-size:12px">运行时长</span><div>{{durationText(detail.durationSec)}}</div></div>
       </div>
       <div class="form-label" style="margin-bottom:6px">备注</div>
@@ -162,14 +145,11 @@ export default {
     const form = reactive({
       robotUuid: '',
       accountName: '',
-      robotClientGroupUuid: '',
       startDate: '',
       endDate: '',
       waitTimeoutSeconds: 600,
       runTimeout: '',
       priority: 'middle',
-      executeScope: 'any',
-      useIdempotent: true,
     });
 
     const busy = ref(false);
@@ -198,9 +178,8 @@ export default {
         return;
       }
       const accountName = (form.accountName || '').trim();
-      const robotClientGroupUuid = (form.robotClientGroupUuid || '').trim();
-      if (!accountName && !robotClientGroupUuid) {
-        show('请填写机器人名称或机器人分组', 'error');
+      if (!accountName) {
+        show('请填写机器人名称', 'error');
         return;
       }
 
@@ -214,13 +193,11 @@ export default {
 
       const body = {
         robotUuid,
-        accountName: accountName || undefined,
-        robotClientGroupUuid: robotClientGroupUuid || undefined,
+        accountName,
         params: params.length ? params : undefined,
         waitTimeoutSeconds: Number(form.waitTimeoutSeconds) || 600,
         priority: form.priority,
-        executeScope: form.executeScope,
-        useIdempotent: !!form.useIdempotent,
+        useIdempotent: true,
         taskName: '每日数据补全',
       };
       const rt = form.runTimeout === '' || form.runTimeout == null ? null : Number(form.runTimeout);
