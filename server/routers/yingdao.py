@@ -121,7 +121,12 @@ async def job_start(body: JobStartBody):
             data = {"raw": data}
 
         job_uuid = str(data.get("jobUuid") or "").strip()
-        task_name = (body.taskName or "").strip() or "每日数据补全"
+        # 任务名称优先用影刀应用名；启动响应若无则先占位，查询后回填
+        task_name = (
+            str(data.get("robotName") or data.get("robot_name") or "").strip()
+            or (body.taskName or "").strip()
+            or "（启动中）"
+        )
         remark = _remark_from_params(body.params)
         if job_uuid:
             await jobs_store.insert_job(
@@ -135,7 +140,16 @@ async def job_start(body: JobStartBody):
                 status_name="已提交",
                 raw=data,
             )
-            record = await jobs_store.get_by_uuid(job_uuid)
+            # 立即查一次，用应用名回填任务名称（不改备注）
+            try:
+                q = yd.query_job(job_uuid)
+                qdata = q.get("data") if isinstance(q, dict) else None
+                if isinstance(qdata, dict):
+                    record = await jobs_store.update_from_query(job_uuid, qdata)
+                else:
+                    record = await jobs_store.get_by_uuid(job_uuid)
+            except Exception:
+                record = await jobs_store.get_by_uuid(job_uuid)
             data = {**data, "record": record}
         return {"code": 0, "data": data}
     except ValueError as e:

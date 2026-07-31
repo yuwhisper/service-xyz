@@ -124,8 +124,8 @@ async def update_from_query(job_uuid: str, data: dict[str, Any]) -> dict[str, An
     await ensure_table()
     status = str(data.get("status") or "").strip()
     status_name = str(data.get("statusName") or data.get("status_name") or "").strip()
+    # 影刀 robotName = 应用名称 → 写入任务名称；备注保留启动时的日期参数，不再被覆盖
     robot_name = str(data.get("robotName") or data.get("robot_name") or "").strip()
-    remark = robot_name
     raw_json = json.dumps(data, ensure_ascii=False)
 
     row = await execute_one("SELECT * FROM yingdao_jobs WHERE job_uuid=%s", (job_uuid,))
@@ -133,20 +133,42 @@ async def update_from_query(job_uuid: str, data: dict[str, Any]) -> dict[str, An
         return None
 
     finished = status.lower() in _DONE
-    duration = row.get("duration_sec")
+    # 历史数据：备注曾被误写成应用名，与 robotName 相同时清空，避免和应用名重复
+    bad_remark = bool(
+        robot_name and str(row.get("remark") or "").strip() == robot_name
+    )
     if finished and row.get("started_at") and not row.get("finished_at"):
-        # duration computed in SQL
         await execute_update(
-            "UPDATE yingdao_jobs SET status=%s, status_name=%s, remark=IF(%s='', remark, %s), "
+            "UPDATE yingdao_jobs SET status=%s, status_name=%s, "
+            "task_name=IF(%s='', task_name, %s), "
+            "remark=IF(%s, '', remark), "
             "raw_json=%s, finished_at=NOW(), "
             "duration_sec=TIMESTAMPDIFF(SECOND, COALESCE(started_at, created_at), NOW()), "
             "updated_at=NOW() WHERE job_uuid=%s",
-            (status or row["status"], status_name or row["status_name"], remark, remark, raw_json, job_uuid),
+            (
+                status or row["status"],
+                status_name or row["status_name"],
+                robot_name,
+                robot_name,
+                1 if bad_remark else 0,
+                raw_json,
+                job_uuid,
+            ),
         )
     else:
         await execute_update(
-            "UPDATE yingdao_jobs SET status=%s, status_name=%s, remark=IF(%s='', remark, %s), "
+            "UPDATE yingdao_jobs SET status=%s, status_name=%s, "
+            "task_name=IF(%s='', task_name, %s), "
+            "remark=IF(%s, '', remark), "
             "raw_json=%s, updated_at=NOW() WHERE job_uuid=%s",
-            (status or row["status"], status_name or row["status_name"], remark, remark, raw_json, job_uuid),
+            (
+                status or row["status"],
+                status_name or row["status_name"],
+                robot_name,
+                robot_name,
+                1 if bad_remark else 0,
+                raw_json,
+                job_uuid,
+            ),
         )
     return await get_by_uuid(job_uuid)

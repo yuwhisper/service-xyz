@@ -110,7 +110,7 @@ export default {
           <tbody>
             <tr v-for="row in jobs" :key="row.jobUuid || row.id">
               <td>
-                <div class="backfill-task-name">{{row.taskName || '每日数据补全'}}</div>
+                <div class="backfill-task-name">{{row.taskName || '—'}}</div>
                 <div class="backfill-job-id">{{row.jobUuid}}</div>
               </td>
               <td>
@@ -221,7 +221,6 @@ export default {
         waitTimeoutSeconds: Number(form.waitTimeoutSeconds) || 600,
         priority: form.priority,
         useIdempotent: true,
-        taskName: '每日数据补全',
       };
       const rt = form.runTimeout === '' || form.runTimeout == null ? null : Number(form.runTimeout);
       if (rt != null && !Number.isNaN(rt)) body.runTimeout = rt;
