@@ -11,7 +11,7 @@ const pages = { dashboard: Dashboard };
 async function loadPage(name) {
   if (pages[name]) return pages[name];
   // 版本参数避免浏览器长期缓存旧页面模块（如接口参数文档）
-  const m = await import(`./pages/${name}.js?v=20260731b`);
+  const m = await import(`./pages/${name}.js?v=20260731c`);
   pages[name] = m.default;
   return m.default;
 }
@@ -44,6 +44,7 @@ const sidebar = {
       { key: 'dispatch', label: '调度任务', icon: '⚡' },
       { key: 'schedule', label: '定时任务', icon: '⏰' },
       { key: 'backfill', label: '每日数据补全', iconImg: 'img/yingdao.svg' },
+      { key: 'apps', label: '影刀应用', icon: '📦' },
     ]};
   }
 };

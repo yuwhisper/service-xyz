@@ -155,6 +155,7 @@ python server/main.py
 | POST | `/jst/lwh/allocation/create` | 创建虚拟仓调拨单；校验调出/调入/实体仓/SKU/库存，详细中文报错 |
 | POST | `/jst/lwh/operation/create` | 创建虚拟仓分配/归还单；失败 detail 为二维列表 |
 | GET | `/yingdao/clients` | 拉取影刀机器人列表（每日数据补全下拉） |
+| GET | `/yingdao/apps` | 影刀应用字典列表；`key` 模糊搜名称，分页 |
 | POST | `/yingdao/job/start` | 启动影刀应用；Key 在服务端，返回 `jobUuid` |
 | POST | `/yingdao/job/query` | 按 `jobUuid` 查询影刀任务状态 |
 
@@ -206,6 +207,7 @@ Content-Type: application/json
 - 凭证：`YINGDAO_ACCESS_KEY_ID` / `YINGDAO_ACCESS_KEY_SECRET`（仅存服务端 `.env`）
 - 可选 URL 覆盖：`YINGDAO_TOKEN_URL` / `YINGDAO_JOB_START_URL` / `YINGDAO_JOB_QUERY_URL`
 - 机器人列表：`GET /yingdao/clients`，返回 `{accountName, status, statusName, ...}`（代理影刀 `client/list`）
+- 应用列表：`GET /yingdao/apps?key=&page=&size=`（代理影刀 `robot/v2/query`）；应用接口不含绑定运行机器人
 - 启动：`POST /yingdao/job/start`，body `{ robotUuid, accountName?, robotClientGroupUuid?, params?, ... }`；账号与分组二选一
 - 查询：`POST /yingdao/job/query`，body `{ jobUuid }`；返回影刀原始 `status` / `statusName` 等
 

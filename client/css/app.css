@@ -123,6 +123,18 @@ tbody tr:hover{background:#fafbfc}
 .backfill-status.st-running{background:#e8f3ff;color:#165dff}
 .backfill-status.st-done{background:var(--c-green-bg);color:var(--c-green)}
 .backfill-status.st-fail{background:var(--c-red-bg);color:var(--c-red)}
+
+.apps-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.apps-search{display:flex;align-items:center;gap:8px;flex:1;min-width:260px}
+.apps-search .form-input{flex:1;max-width:360px}
+.apps-total{font-size:12px;color:var(--c-sub);white-space:nowrap}
+.apps-table{font-size:13px}
+.apps-table th{text-transform:none;letter-spacing:0}
+.apps-name{font-weight:500;max-width:260px}
+.apps-uuid{font-family:monospace;font-size:12px;color:var(--c-sub);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.apps-clients{color:var(--c-sub);max-width:160px}
+.apps-pager{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:14px;font-size:13px;color:var(--c-sub)}
+.apps-page-size{width:auto;min-width:96px}
 .nowrap{white-space:nowrap}
 .form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--c-blue);box-shadow:0 0 0 3px rgba(22,93,255,.08)}
 .form-textarea{resize:vertical;min-height:80px}

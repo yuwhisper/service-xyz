@@ -18,3 +18,7 @@ CLIENT_LIST_URL = os.getenv(
     "YINGDAO_CLIENT_LIST_URL",
     "https://api.yingdao.com/oapi/dispatch/v2/client/list",
 )
+ROBOT_QUERY_URL = os.getenv(
+    "YINGDAO_ROBOT_QUERY_URL",
+    "https://api.yingdao.com/oapi/robot/v2/query",
+)

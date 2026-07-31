@@ -84,6 +84,24 @@ async def client_list():
         raise HTTPException(500, str(e)) from e
 
 
+@router.get("/apps")
+async def app_list(
+    key: str = Query(default="", description="应用名称模糊搜索"),
+    page: int = Query(default=1, ge=1, description="页码"),
+    size: int = Query(default=20, ge=1, le=100, description="每页条数"),
+):
+    """影刀应用字典列表。"""
+    try:
+        data = yd.list_apps(key=key, page=page, size=size)
+        return {"code": 0, "data": data}
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    except YingdaoHttpError as e:
+        _raise_yd(e)
+    except Exception as e:
+        raise HTTPException(500, str(e)) from e
+
+
 @router.post("/job/start")
 async def job_start(body: JobStartBody):
     try:

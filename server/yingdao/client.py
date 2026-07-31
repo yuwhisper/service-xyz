@@ -13,6 +13,7 @@ from server.yingdao.config import (
     CLIENT_LIST_URL,
     JOB_QUERY_URL,
     JOB_START_URL,
+    ROBOT_QUERY_URL,
     TOKEN_URL,
 )
 
@@ -158,6 +159,7 @@ def _request_json(
     url: str,
     *,
     json_body: dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
     retry_on_401: bool = True,
 ) -> dict[str, Any]:
     token = get_access_token()
@@ -170,6 +172,7 @@ def _request_json(
         url,
         headers=headers,
         json=json_body,
+        params=params,
         timeout=60,
     )
     if resp.status_code == 401 and retry_on_401:
@@ -181,6 +184,7 @@ def _request_json(
             url,
             headers=headers,
             json=json_body,
+            params=params,
             timeout=60,
         )
 
@@ -280,3 +284,50 @@ def list_clients() -> list[dict[str, Any]]:
         })
     items.sort(key=lambda x: x["accountName"])
     return items
+
+
+def list_apps(
+    *,
+    key: str = "",
+    page: int = 1,
+    size: int = 20,
+) -> dict[str, Any]:
+    """
+    拉取影刀应用列表（GET /oapi/robot/v2/query）。
+    key 为应用名称模糊搜索；运行机器人字段接口不提供。
+    """
+    page = max(1, int(page or 1))
+    size = min(100, max(1, int(size or 20)))
+    params: dict[str, Any] = {"page": page, "size": size}
+    key_text = (key or "").strip()
+    if key_text:
+        params["key"] = key_text
+
+    result = _request_json("GET", ROBOT_QUERY_URL, params=params)
+    raw = result.get("data")
+    if not isinstance(raw, list):
+        raw = []
+
+    items: list[dict[str, Any]] = []
+    for row in raw:
+        if not isinstance(row, dict):
+            continue
+        items.append({
+            "robotName": str(row.get("robotName") or "").strip(),
+            "robotUuid": str(row.get("robotUuid") or "").strip(),
+            "createTime": str(row.get("createTime") or "").strip(),
+            "updateTime": str(row.get("updateTime") or "").strip(),
+            "ownerName": str(row.get("ownerName") or "").strip(),
+            "ownerUuid": str(row.get("ownerUuid") or "").strip(),
+            # 影刀应用列表不返回绑定运行机器人；定时任务详情才有 robotClientList
+            "runClients": [],
+        })
+
+    page_info = result.get("page") if isinstance(result.get("page"), dict) else {}
+    return {
+        "items": items,
+        "page": int(page_info.get("page") or page),
+        "size": int(page_info.get("size") or size),
+        "total": int(page_info.get("total") or len(items)),
+        "pages": int(page_info.get("pages") or 1),
+    }
