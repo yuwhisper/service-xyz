@@ -48,7 +48,12 @@ export default {
         </div>
         <div class="backfill-field">
           <label>机器人名称<span class="form-req">*</span></label>
-          <input class="form-input" v-model="form.accountName" placeholder="控制台机器人账号"/>
+          <select class="form-select" v-model="form.accountName" :disabled="loadingClients">
+            <option value="">{{ loadingClients ? '加载中...' : (clients.length ? '请选择机器人' : '暂无机器人') }}</option>
+            <option v-for="c in clients" :key="c.accountName" :value="c.accountName">
+              {{c.accountName}}（{{c.statusName || c.status || '—'}}）
+            </option>
+          </select>
         </div>
         <div class="backfill-field backfill-field-sm">
           <label>开始日期</label>
@@ -154,9 +159,27 @@ export default {
 
     const busy = ref(false);
     const loadingList = ref(false);
+    const loadingClients = ref(false);
     const hint = ref('');
     const jobs = ref([]);
+    const clients = ref([]);
     const detail = ref(null);
+
+    async function loadClients() {
+      loadingClients.value = true;
+      try {
+        const { data } = await http.get('/service/zyx/yingdao/clients');
+        clients.value = data?.data?.items || [];
+        if (form.accountName && !clients.value.some(c => c.accountName === form.accountName)) {
+          form.accountName = '';
+        }
+      } catch (e) {
+        clients.value = [];
+        show(errHint(e), 'error');
+      } finally {
+        loadingClients.value = false;
+      }
+    }
 
     async function loadJobs() {
       loadingList.value = true;
@@ -237,11 +260,14 @@ export default {
       detail.value = row;
     }
 
-    onMounted(loadJobs);
+    onMounted(() => {
+      loadClients();
+      loadJobs();
+    });
 
     return {
-      form, busy, loadingList, hint, jobs, detail,
-      startJob, loadJobs, refreshRow, showDetail,
+      form, busy, loadingList, loadingClients, hint, jobs, clients, detail,
+      startJob, loadJobs, loadClients, refreshRow, showDetail,
       statusClass, statusLabel, durationText,
     };
   }

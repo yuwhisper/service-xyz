@@ -70,6 +70,20 @@ async def job_list(limit: int = Query(default=50, ge=1, le=200)):
         raise HTTPException(500, str(e)) from e
 
 
+@router.get("/clients")
+async def client_list():
+    """影刀机器人列表（供每日数据补全下拉）。"""
+    try:
+        items = yd.list_clients()
+        return {"code": 0, "data": {"items": items, "total": len(items)}}
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    except YingdaoHttpError as e:
+        _raise_yd(e)
+    except Exception as e:
+        raise HTTPException(500, str(e)) from e
+
+
 @router.post("/job/start")
 async def job_start(body: JobStartBody):
     try:

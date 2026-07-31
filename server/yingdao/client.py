@@ -10,6 +10,7 @@ import requests
 from server.yingdao.config import (
     ACCESS_KEY_ID,
     ACCESS_KEY_SECRET,
+    CLIENT_LIST_URL,
     JOB_QUERY_URL,
     JOB_START_URL,
     TOKEN_URL,
@@ -234,3 +235,48 @@ def query_job(job_uuid: str) -> dict[str, Any]:
         JOB_QUERY_URL,
         json_body={"jobUuid": job_uuid.strip()},
     )
+
+
+_STATUS_CN = {
+    "idle": "空闲",
+    "running": "运行中",
+    "offline": "离线",
+    "connected": "已连接",
+    "allocated": "已分配",
+    "abnormal": "异常",
+}
+
+
+def list_clients() -> list[dict[str, Any]]:
+    """拉取影刀机器人列表，供下拉选择 accountName。"""
+    result = _request_json("POST", CLIENT_LIST_URL, json_body={})
+    raw = result.get("data")
+    if isinstance(raw, dict):
+        raw = raw.get("list") or raw.get("items") or raw.get("data") or []
+    if not isinstance(raw, list):
+        return []
+
+    items: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in raw:
+        if not isinstance(row, dict):
+            continue
+        name = str(
+            row.get("robotClientName")
+            or row.get("accountName")
+            or row.get("name")
+            or ""
+        ).strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        status = str(row.get("status") or "").strip()
+        items.append({
+            "accountName": name,
+            "robotClientUuid": str(row.get("robotClientUuid") or "").strip(),
+            "status": status,
+            "statusName": _STATUS_CN.get(status, status or "—"),
+            "machineName": str(row.get("machineName") or "").strip(),
+        })
+    items.sort(key=lambda x: x["accountName"])
+    return items

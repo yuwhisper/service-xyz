@@ -14,3 +14,7 @@ JOB_QUERY_URL = os.getenv(
     "YINGDAO_JOB_QUERY_URL",
     "https://api.yingdao.com/oapi/dispatch/v2/job/query",
 )
+CLIENT_LIST_URL = os.getenv(
+    "YINGDAO_CLIENT_LIST_URL",
+    "https://api.yingdao.com/oapi/dispatch/v2/client/list",
+)
