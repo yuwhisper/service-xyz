@@ -7,10 +7,17 @@ function errHint(e) {
   return e?.message || '请求失败';
 }
 
-function runClientsText(row) {
+function runClientsList(row) {
   const list = row?.runClients;
-  if (!Array.isArray(list) || !list.length) return '—';
-  return list.map(x => (typeof x === 'string' ? x : (x.accountName || x.robotClientName || ''))).filter(Boolean).join('、') || '—';
+  if (!Array.isArray(list)) return [];
+  return list
+    .map(x => (typeof x === 'string'
+      ? { accountName: x, statusName: '' }
+      : {
+          accountName: x.accountName || x.robotClientName || '',
+          statusName: x.statusName || x.status || '',
+        }))
+    .filter(x => x.accountName);
 }
 
 export default {
@@ -18,7 +25,7 @@ export default {
   <div class="main-content">
     <div class="page-header">
       <h1>影刀应用</h1>
-      <p>从影刀拉取应用列表；运行机器人字段接口不返回，暂显示 —</p>
+      <p>从影刀拉取应用列表；调度机器人来自定时任务绑定（非手动启动记录）</p>
     </div>
 
     <div class="card">
@@ -32,7 +39,7 @@ export default {
         <span class="apps-total">共 {{total}} 条</span>
       </div>
 
-      <div v-if="loading" class="empty-state"><p>加载中...</p></div>
+      <div v-if="loading" class="empty-state"><p>加载中{{ bindingTip }}...</p></div>
       <div v-else-if="!items.length" class="empty-state"><p>暂无应用</p></div>
       <div v-else class="table-wrap">
         <table class="apps-table">
@@ -43,7 +50,7 @@ export default {
               <th>创建时间</th>
               <th>更新时间</th>
               <th>所有者</th>
-              <th>运行机器人</th>
+              <th>调度机器人</th>
             </tr>
           </thead>
           <tbody>
@@ -53,7 +60,18 @@ export default {
               <td class="nowrap">{{row.createTime || '—'}}</td>
               <td class="nowrap">{{row.updateTime || '—'}}</td>
               <td>{{row.ownerName || '—'}}</td>
-              <td class="apps-clients">{{runClientsText(row)}}</td>
+              <td class="apps-clients">
+                <template v-if="runClientsList(row).length">
+                  <span v-for="c in runClientsList(row).slice(0, 3)" :key="c.accountName"
+                    class="apps-client-tag" :title="c.statusName || ''">
+                    {{c.accountName}}
+                  </span>
+                  <span v-if="runClientsList(row).length > 3" class="apps-client-more">
+                    +{{runClientsList(row).length - 3}}
+                  </span>
+                </template>
+                <span v-else class="apps-client-empty">未配置定时调度</span>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -79,6 +97,7 @@ export default {
     const activeKey = ref('');
     const items = ref([]);
     const loading = ref(false);
+    const bindingTip = ref('');
     const page = ref(1);
     const size = ref(20);
     const total = ref(0);
@@ -86,6 +105,7 @@ export default {
 
     async function load() {
       loading.value = true;
+      bindingTip.value = '（首次同步定时绑定可能较慢）';
       try {
         const { data } = await http.get('/service/zyx/yingdao/apps', {
           params: {
@@ -93,6 +113,7 @@ export default {
             page: page.value,
             size: size.value,
           },
+          timeout: 180000,
         });
         const d = data?.data || {};
         items.value = d.items || [];
@@ -106,6 +127,7 @@ export default {
         show(errHint(e), 'error');
       } finally {
         loading.value = false;
+        bindingTip.value = '';
       }
     }
 
@@ -130,8 +152,8 @@ export default {
     onMounted(load);
 
     return {
-      keyword, items, loading, page, size, total, pages,
-      search, reset, go, runClientsText,
+      keyword, items, loading, bindingTip, page, size, total, pages,
+      search, reset, go, runClientsList,
     };
   }
 };

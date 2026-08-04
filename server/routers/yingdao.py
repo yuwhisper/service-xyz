@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
@@ -90,9 +92,42 @@ async def app_list(
     page: int = Query(default=1, ge=1, description="页码"),
     size: int = Query(default=20, ge=1, le=100, description="每页条数"),
 ):
-    """影刀应用字典列表。"""
+    """影刀应用字典列表（含定时调度机器人绑定）。"""
     try:
-        data = yd.list_apps(key=key, page=page, size=size)
+        data = await asyncio.to_thread(
+            yd.list_apps, key=key, page=page, size=size, with_bindings=True
+        )
+        return {"code": 0, "data": data}
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    except YingdaoHttpError as e:
+        _raise_yd(e)
+    except Exception as e:
+        raise HTTPException(500, str(e)) from e
+
+
+@router.get("/apps/search")
+async def apps_search(
+    key: str = Query(..., description="应用名称关键词"),
+    limit: int = Query(default=20, ge=1, le=50, description="返回条数"),
+):
+    """启动页：按名称搜索应用并返回调度机器人候选。"""
+    try:
+        items = await asyncio.to_thread(yd.search_apps, key=key, limit=limit)
+        return {"code": 0, "data": {"items": items, "total": len(items)}}
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    except YingdaoHttpError as e:
+        _raise_yd(e)
+    except Exception as e:
+        raise HTTPException(500, str(e)) from e
+
+
+@router.get("/apps/{robot_uuid}/bindings")
+async def app_bindings(robot_uuid: str):
+    """单个应用的定时调度机器人绑定。"""
+    try:
+        data = await asyncio.to_thread(yd.get_app_binding, robot_uuid)
         return {"code": 0, "data": data}
     except ValueError as e:
         raise HTTPException(400, str(e)) from e

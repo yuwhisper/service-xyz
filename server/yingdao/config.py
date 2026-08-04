@@ -22,3 +22,11 @@ ROBOT_QUERY_URL = os.getenv(
     "YINGDAO_ROBOT_QUERY_URL",
     "https://api.yingdao.com/oapi/robot/v2/query",
 )
+SCHEDULE_LIST_URL = os.getenv(
+    "YINGDAO_SCHEDULE_LIST_URL",
+    "https://api.yingdao.com/oapi/dispatch/v2/schedule/list",
+)
+SCHEDULE_DETAIL_URL = os.getenv(
+    "YINGDAO_SCHEDULE_DETAIL_URL",
+    "https://api.yingdao.com/oapi/dispatch/v2/schedule/detail",
+)

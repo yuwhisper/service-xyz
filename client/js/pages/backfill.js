@@ -1,4 +1,4 @@
-import { ref, reactive, inject, onMounted } from 'vue';
+import { ref, reactive, computed, inject, onMounted } from 'vue';
 
 function errHint(e) {
   const detail = e?.response?.data?.detail;
@@ -37,23 +37,39 @@ export default {
   <div class="main-content">
     <div class="page-header">
       <h1>每日数据补全</h1>
-      <p>Key 在服务端 .env，本页不展示密钥</p>
+      <p>Key 在服务端 .env，本页不展示密钥；选应用后按定时调度绑定回填机器人</p>
     </div>
 
     <div class="card backfill-form-card">
       <div class="backfill-params">
-        <div class="backfill-field">
-          <label>应用UUID<span class="form-req">*</span></label>
-          <input class="form-input" v-model="form.robotUuid" placeholder="robotUuid"/>
+        <div class="backfill-field backfill-field-app">
+          <label>应用名称<span class="form-req">*</span></label>
+          <div class="backfill-app-search">
+            <input class="form-input" v-model="appKeyword" placeholder="输入应用名称搜索"
+              @keyup.enter="searchApps"/>
+            <button class="btn btn-ghost btn-sm" :disabled="searchingApps || busy" @click="searchApps">搜索</button>
+          </div>
+          <select class="form-select" v-model="form.robotUuid" :disabled="!appOptions.length"
+            @change="onAppSelected">
+            <option value="">{{ appSelectPlaceholder }}</option>
+            <option v-for="a in appOptions" :key="a.robotUuid" :value="a.robotUuid">
+              {{a.robotName}}
+            </option>
+          </select>
+          <div v-if="selectedAppName" class="backfill-app-picked">
+            已选：{{selectedAppName}}
+            <span class="backfill-app-uuid">{{form.robotUuid}}</span>
+          </div>
         </div>
         <div class="backfill-field">
           <label>机器人名称<span class="form-req">*</span></label>
-          <select class="form-select" v-model="form.accountName" :disabled="loadingClients">
-            <option value="">{{ loadingClients ? '加载中...' : (clients.length ? '请选择机器人' : '暂无机器人') }}</option>
-            <option v-for="c in clients" :key="c.accountName" :value="c.accountName">
+          <select class="form-select" v-model="form.accountName" :disabled="loadingClients || !form.robotUuid">
+            <option value="">{{ robotPlaceholder }}</option>
+            <option v-for="c in robotOptions" :key="c.accountName" :value="c.accountName">
               {{c.accountName}}（{{c.statusName || c.status || '—'}}）
             </option>
           </select>
+          <div v-if="robotHint" class="backfill-bind-hint">{{robotHint}}</div>
         </div>
         <div class="backfill-field backfill-field-sm">
           <label>开始日期</label>
@@ -160,21 +176,45 @@ export default {
     const busy = ref(false);
     const loadingList = ref(false);
     const loadingClients = ref(false);
+    const searchingApps = ref(false);
     const hint = ref('');
+    const robotHint = ref('');
     const jobs = ref([]);
-    const clients = ref([]);
+    const allClients = ref([]);
+    const boundClients = ref([]);
+    const useBoundOnly = ref(false);
+    const appKeyword = ref('');
+    const appOptions = ref([]);
+    const selectedAppName = ref('');
     const detail = ref(null);
+
+    const robotOptions = computed(() => {
+      if (useBoundOnly.value && boundClients.value.length) return boundClients.value;
+      return allClients.value;
+    });
+
+    const appSelectPlaceholder = computed(() => {
+      if (searchingApps.value) return '搜索中...';
+      if (!appOptions.value.length) return '请先搜索并选择应用';
+      return '请选择应用';
+    });
+
+    const robotPlaceholder = computed(() => {
+      if (!form.robotUuid) return '请先选择应用';
+      if (loadingClients.value) return '加载中...';
+      if (useBoundOnly.value && boundClients.value.length > 1) return '多个调度机器人，请选择';
+      if (useBoundOnly.value && boundClients.value.length === 1) return '已自动选中调度机器人';
+      if (!robotOptions.value.length) return '暂无机器人';
+      return '请选择机器人';
+    });
 
     async function loadClients() {
       loadingClients.value = true;
       try {
         const { data } = await http.get('/service/zyx/yingdao/clients');
-        clients.value = data?.data?.items || [];
-        if (form.accountName && !clients.value.some(c => c.accountName === form.accountName)) {
-          form.accountName = '';
-        }
+        allClients.value = data?.data?.items || [];
       } catch (e) {
-        clients.value = [];
+        allClients.value = [];
         show(errHint(e), 'error');
       } finally {
         loadingClients.value = false;
@@ -194,15 +234,77 @@ export default {
       }
     }
 
+    async function searchApps() {
+      const key = (appKeyword.value || '').trim();
+      if (!key) {
+        show('请输入应用名称关键词', 'error');
+        return;
+      }
+      searchingApps.value = true;
+      try {
+        const { data } = await http.get('/service/zyx/yingdao/apps/search', {
+          params: { key, limit: 30 },
+          timeout: 180000,
+        });
+        appOptions.value = data?.data?.items || [];
+        if (!appOptions.value.length) {
+          form.robotUuid = '';
+          selectedAppName.value = '';
+          boundClients.value = [];
+          useBoundOnly.value = false;
+          form.accountName = '';
+          robotHint.value = '';
+          show('未找到匹配应用', 'error');
+        } else if (appOptions.value.length === 1) {
+          form.robotUuid = appOptions.value[0].robotUuid;
+          onAppSelected();
+        } else {
+          form.robotUuid = '';
+          selectedAppName.value = '';
+          boundClients.value = [];
+          useBoundOnly.value = false;
+          form.accountName = '';
+          robotHint.value = `找到 ${appOptions.value.length} 个应用，请选择`;
+        }
+      } catch (e) {
+        appOptions.value = [];
+        show(errHint(e), 'error');
+      } finally {
+        searchingApps.value = false;
+      }
+    }
+
+    function onAppSelected() {
+      const uuid = (form.robotUuid || '').trim();
+      const app = appOptions.value.find(a => a.robotUuid === uuid);
+      selectedAppName.value = app?.robotName || '';
+      form.accountName = '';
+      const clients = Array.isArray(app?.runClients) ? app.runClients : [];
+      boundClients.value = clients;
+      if (clients.length === 1) {
+        useBoundOnly.value = true;
+        form.accountName = clients[0].accountName;
+        robotHint.value = '已按定时调度自动选中机器人，可手动更换';
+      } else if (clients.length > 1) {
+        useBoundOnly.value = true;
+        robotHint.value = `该应用有 ${clients.length} 个调度机器人，请手动选择`;
+      } else {
+        useBoundOnly.value = false;
+        robotHint.value = '未配置定时调度，请从全部机器人中选择';
+      }
+    }
+
     async function startJob() {
       const robotUuid = (form.robotUuid || '').trim();
       if (!robotUuid) {
-        show('请填写应用UUID', 'error');
+        show('请搜索并选择应用', 'error');
         return;
       }
       const accountName = (form.accountName || '').trim();
       if (!accountName) {
-        show('请填写机器人名称', 'error');
+        show(useBoundOnly.value && boundClients.value.length > 1
+          ? '请选择调度机器人'
+          : '请选择机器人名称', 'error');
         return;
       }
 
@@ -221,6 +323,7 @@ export default {
         waitTimeoutSeconds: Number(form.waitTimeoutSeconds) || 600,
         priority: form.priority,
         useIdempotent: true,
+        taskName: selectedAppName.value || undefined,
       };
       const rt = form.runTimeout === '' || form.runTimeout == null ? null : Number(form.runTimeout);
       if (rt != null && !Number.isNaN(rt)) body.runTimeout = rt;
@@ -265,8 +368,11 @@ export default {
     });
 
     return {
-      form, busy, loadingList, loadingClients, hint, jobs, clients, detail,
-      startJob, loadJobs, loadClients, refreshRow, showDetail,
+      form, busy, loadingList, loadingClients, searchingApps,
+      hint, robotHint, jobs, detail,
+      appKeyword, appOptions, selectedAppName,
+      robotOptions, appSelectPlaceholder, robotPlaceholder,
+      searchApps, onAppSelected, startJob, loadJobs, refreshRow, showDetail,
       statusClass, statusLabel, durationText,
     };
   }
